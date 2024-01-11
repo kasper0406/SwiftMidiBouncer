@@ -7,25 +7,51 @@
 
 import Foundation
 
-let pianoYamahaC7: URL = URL(fileURLWithPath: "/Volumes/git/ESX24/piano_YamahaC7/YamahaC7.exs")
-
 // Create dataset directory
 let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v0")
 
+let instruments = [
+    InstrumentSpec(
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/piano_YamahaC7/YamahaC7.exs"),
+        lowKey: 21,
+        highKey: 108,
+        category: "piano",
+        sampleName: "YamahaC7"
+    ),
+    InstrumentSpec(
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/piano_BechsteinFelt/piano_BechsteinFelt.exs"),
+        lowKey: 21,
+        highKey: 108,
+        category: "piano",
+        sampleName: "BechsteinFelt"
+    ),
+    InstrumentSpec(
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/violin_candp/violin_candp.exs"),
+        lowKey: 55,
+        highKey: 105,
+        category: "violin",
+        sampleName: "candp"
+    )
+]
+
 let generator = try SampleGenerator()
-try generator.useInstrument(instrumentPack: pianoYamahaC7)
 
-for key in 21..<108 {
-    generator.clearTracks()
+for instrument in instruments {
+    try generator.useInstrument(instrumentPack: instrument.url)
 
-    for (index, velocity) in [10, 40, 80, 127].enumerated() {
-        generator.stage(note: Note(time: Double(index), duration: Double(index + 1), key: UInt8(key), velocity: UInt8(velocity)))
+    for key in instrument.lowKey...instrument.highKey {
+        generator.clearTracks()
+
+        for (index, velocity) in [10, 40, 80, 127].enumerated() {
+            generator.stage(note: Note(time: Double(index), duration: Double(index + 1), key: UInt8(key), velocity: UInt8(velocity)))
+        }
+
+        let fileName = "\(instrument.category)_\(instrument.sampleName)_\(key)"
+        let aacOutputFile = datasetDirectory.appending(path: "\(fileName).aac")
+        let csvOutputFile = datasetDirectory.appending(path: "\(fileName).csv")
+
+        let csvString = noteEventsToCsv(notes: try generator.getStagedEvents())
+        try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
+        try generator.generateAac(outputUrl: aacOutputFile)
     }
-
-    let aacOutputFile = datasetDirectory.appending(path: "piano_\(key).aac")
-    let csvOutputFile = datasetDirectory.appending(path: "piano_\(key).csv")
-
-    let csvString = noteEventsToCsv(notes: try generator.getStagedEvents())
-    try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
-    try generator.generateAac(outputUrl: aacOutputFile)
 }

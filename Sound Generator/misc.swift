@@ -8,6 +8,19 @@
 import Foundation
 import AVFoundation
 
+struct InstrumentSpec {
+    // File information
+    var url: URL
+
+    // Register information in Midi key numbering
+    var lowKey: Int
+    var highKey: Int
+
+    // The name of the instrument
+    var category: String // Category, fx `piano, `viloa`, `violin`, etc.
+    var sampleName: String // Fx `Yamaha7C`, 'c-and-p`, etc.
+}
+
 func isBufferAllZeros(buffer: AVAudioPCMBuffer) -> Bool {
     if let bufferData = buffer.floatChannelData {
         for channel in 0..<Int(buffer.format.channelCount) {
