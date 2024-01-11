@@ -92,7 +92,7 @@ class SampleGenerator {
         track.addEvent(noteMidiEvent, at: note.time)
     }
 
-    func loadFromMidiFile(file: URL) throws {
+    func loadFromMidiFile(midiFileURL: URL) throws {
         try sequencer.load(from: midiFileURL)
     }
 
@@ -126,6 +126,10 @@ class SampleGenerator {
         }
 
         return events
+    }
+
+    func clearTracks() {
+        sequencer.tracks.forEach { track in sequencer.removeTrack(track) }
     }
 
     func generateWav(outputUrl: URL) throws {

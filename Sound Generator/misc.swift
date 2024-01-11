@@ -22,3 +22,12 @@ func isBufferAllZeros(buffer: AVAudioPCMBuffer) -> Bool {
     }
     return true
 }
+
+func noteEventsToCsv(notes: [Note]) -> String {
+    var csv = ""
+    for note in notes {
+        let velocityFraction = String(format: "%.2f", Double(note.velocity)/127.0)
+        csv += "\(note.time),\(note.duration),\(note.key),\(velocityFraction)\n"
+    }
+    return csv
+}
