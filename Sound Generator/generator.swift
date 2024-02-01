@@ -16,8 +16,11 @@ import AVFoundation
  * `velocity` is in the range 0 -> 127
  */
 struct Note {
+    // TODO(knielsen): For now we take the time and duration to be position in seconds.
+    //                 Consider if this should be the position in beats instead
     let time: Double
     let duration: Double
+
     let key: UInt8
     let velocity: UInt8
 }
@@ -83,6 +86,11 @@ class SampleGenerator {
             sequencer.createAndAppendTrack()
         }
         let track = sequencer.tracks[0]
+
+        // TODO(knielsen): Consider a better option here.
+        //                 For now hard-code the tempo to 60 bpm, to make the note time in second line up with
+        //                 the generated audio.
+        sequencer.tempoTrack.addEvent(AVExtendedTempoEvent(tempo: 60.0), at: 0.0)
 
         let noteMidiEvent = AVMIDINoteEvent(
             channel: 0,

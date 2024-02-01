@@ -43,7 +43,7 @@ for instrument in instruments {
         generator.clearTracks()
 
         for (index, velocity) in [10, 40, 80, 127].enumerated() {
-            generator.stage(note: Note(time: Double(index), duration: Double(index + 1), key: UInt8(key), velocity: UInt8(velocity)))
+            generator.stage(note: Note(time: Double(index), duration: 1.0, key: UInt8(key), velocity: UInt8(velocity)))
         }
 
         let fileName = "\(instrument.category)_\(instrument.sampleName)_\(key)"
