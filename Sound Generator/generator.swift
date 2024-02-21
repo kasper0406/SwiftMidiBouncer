@@ -2,199 +2,106 @@
 //  generator.swift
 //  Sound Generator
 //
-//  Created by Kasper Nielsen on 11/01/2024.
+//  Created by Kasper Nielsen on 21/02/2024.
 //
 
 import Foundation
 
-import CoreAudio
-import AudioToolbox
-import AVFoundation
+enum Chord: CaseIterable {
+    case major
+    case minor
+    case diminished
+    case augmented
+    case random
+    case single
 
-/*
- * `key` is in the range 0 -> 127
- * `velocity` is in the range 0 -> 127
- */
-struct Note {
-    // TODO(knielsen): For now we take the time and duration to be position in seconds.
-    //                 Consider if this should be the position in beats instead
-    let time: Double
-    let duration: Double
-
-    let key: UInt8
-    let velocity: UInt8
+    func intervals() -> [Int] {
+        switch self {
+        case .major:
+            return [0, 4, 7, 12]
+        case .minor:
+            return [0, 3, 7, 12]
+        case .diminished:
+            return [0, 3, 6, 12]
+        case .augmented:
+            return [0, 4, 8, 12]
+        case .random:
+            // TODO(knielsen): Consider making this have a dynamic number of intervals
+            return [Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12)]
+        case .single:
+            return [0]
+        }
+    }
 }
 
-/**
-  Given a description of midi events generate a rendered audio file
- */
-class SampleGenerator {
+enum PlayType: CaseIterable {
+    case appegio
+    case harmonic
+    // case Tripolet
+}
 
-    // General audio and capacity settings
-    let sampleRate = 44100.0
-    let format: AVAudioFormat
-    let maxFrames: AVAudioFrameCount = 4096
+func addInterval(interval: Int, intervals: [Int]) -> [Int] {
+    var newList: [Int] = intervals
+    newList.append(interval)
+    return newList.sorted()
+}
 
-    // File export settings
-    let wavSettings: [String: Any]
-    let aacSettings: [String: Any]
+enum MaybeTransformTo7thChord: CaseIterable {
+    case no
+    case major7
+    case minor7
 
-    // Audio library instances
-    let engine: AVAudioEngine
-    let sampler: AVAudioUnitSampler
-    let sequencer: AVAudioSequencer
-
-    init() throws {
-        // Set up formats and export settings
-        format = AVAudioFormat(
-            commonFormat: AVAudioCommonFormat.pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: 2,
-            interleaved: false)!
-        wavSettings = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVLinearPCMBitDepthKey: 32,
-            AVNumberOfChannelsKey: 2,
-            AVSampleRateKey: sampleRate
-        ]
-        aacSettings = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: 2
-        ]
-
-        engine = AVAudioEngine()
-        sampler = AVAudioUnitSampler()
-
-        // Setup the engine
-        try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
-        engine.attach(sampler)
-        engine.connect(sampler, to: engine.mainMixerNode, format: format)
-        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: format)
-        try engine.start()
-
-        // Setup the sequencer
-        sequencer = AVAudioSequencer(audioEngine: engine)
-    }
-
-    func useInstrument(instrumentPack: URL) throws {
-        try sampler.loadInstrument(at: instrumentPack)
-    }
-
-    func stage(note: Note) {
-        if sequencer.tracks.isEmpty {
-            sequencer.createAndAppendTrack()
+    func apply(intervals: [Int]) -> [Int] {
+        switch self {
+        case .no:
+            return intervals
+        case .major7:
+            return addInterval(interval: 11, intervals: intervals)
+        case .minor7:
+            return addInterval(interval: 10, intervals: intervals)
         }
-        let track = sequencer.tracks[0]
-
-        // TODO(knielsen): Consider a better option here.
-        //                 For now hard-code the tempo to 60 bpm, to make the note time in second line up with
-        //                 the generated audio.
-        sequencer.tempoTrack.addEvent(AVExtendedTempoEvent(tempo: 60.0), at: 0.0)
-
-        let noteMidiEvent = AVMIDINoteEvent(
-            channel: 0,
-            key: UInt32(note.key),
-            velocity: UInt32(note.velocity),
-            duration: note.duration)
-        track.addEvent(noteMidiEvent, at: note.time)
     }
+}
 
-    func loadFromMidiFile(midiFileURL: URL) throws {
-        try sequencer.load(from: midiFileURL)
-    }
+class EventGenerator {
 
-    /**
-     Returns all the staged nodes ordered by the time they start playing
-     */
-    func getStagedEvents() throws -> [Note] {
-        if sequencer.tracks.isEmpty {
-            return []
-        }
-        let track = sequencer.tracks[0]
-
+    func generate(instrumentSpec: InstrumentSpec, maxDuration: Double = 4.5) -> [Note] {
         var events: [Note] = []
-        var encounteredUnknownEvent = false
-        track.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, timestamp, _ in
-            if let midiEvent = event as?AVMIDINoteEvent {
-                events.append(Note(
-                    time: timestamp.pointee,
-                    duration: midiEvent.duration,
-                    key: UInt8(midiEvent.key),
-                    velocity: UInt8(midiEvent.velocity)
-                ))
-            } else {
-                // We can not throw in this closure so we keep a flag
-                encounteredUnknownEvent = true
-            }
-        })
 
-        if encounteredUnknownEvent {
-            throw NSError(domain: "SampleGenerator", code: 1, userInfo: nil)
+        let middleKey = (instrumentSpec.lowKey + instrumentSpec.highKey) / 2
+
+        var time = 0.0
+        while time < maxDuration && (events.isEmpty || Double.random(in: 0..<1) < 0.95) {
+            let playType = PlayType.allCases.randomElement()!
+            let chord = Chord.allCases.randomElement()!
+            let startingKey = Int.random(in: 0..<12)
+
+            // The duration in seconds per key
+            // TODO(knielsen): Make this be handled by every key in the chord
+            let keyDuration = Double.random(in: 0.1..<1.0)
+
+            // TODO(knielsen): Support transposing and other transformations on the intervals
+            for interval in chord.intervals() {
+                if time >= maxDuration {
+                    break
+                }
+
+                let velocity = UInt8.random(in: 10..<128)
+                let key = UInt8(middleKey + startingKey + interval)
+
+                events.append(Note(time: time, duration: keyDuration, key: key, velocity: velocity))
+                if playType == PlayType.appegio {
+                    time += keyDuration
+                }
+            }
+            if playType == PlayType.harmonic {
+                time += keyDuration
+            }
+
+            let delay = Double.random(in: 0..<0.5)
+            time += delay
         }
 
         return events
-    }
-
-    func clearTracks() {
-        sequencer.tracks.forEach { track in sequencer.removeTrack(track) }
-    }
-
-    func generateWav(outputUrl: URL) throws {
-        let outputFile = try AVAudioFile(
-            forWriting: outputUrl,
-            settings: wavSettings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false)
-        return try generate(outputFile: outputFile)
-    }
-
-    func generateAac(outputUrl: URL) throws {
-        let outputFile = try AVAudioFile(
-            forWriting: outputUrl,
-            settings: aacSettings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false)
-        return try generate(outputFile: outputFile)
-    }
-
-    private func generate(outputFile: AVAudioFile) throws {
-        let buffer = AVAudioPCMBuffer(
-            pcmFormat: engine.manualRenderingFormat,
-            frameCapacity: engine.manualRenderingMaximumFrameCount)!
-
-        sequencer.currentPositionInSeconds = 0
-        var maxTrackLengthInSeconds = 0.0
-        sequencer.tracks.forEach { track in
-            track.destinationAudioUnit = sampler
-            maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
-        }
-
-        try sequencer.start()
-        while sequencer.isPlaying && sequencer.currentPositionInSeconds < maxTrackLengthInSeconds {
-            let framesToRender = min(buffer.frameCapacity, engine.manualRenderingMaximumFrameCount)
-            let status = try engine.renderOffline(framesToRender, to: buffer)
-
-            switch status {
-            case .success:
-                // Write the rendered audio to the file
-                try outputFile.write(from: buffer)
-            case .insufficientDataFromInputNode:
-                // More data is needed to continue rendering
-                break
-            case .cannotDoInCurrentContext, .error:
-                // An error occurred. Handle it here.
-                throw NSError(domain: "SampleGenerator", code: 0, userInfo: nil)
-            default:
-                // Handle other cases
-                break
-            }
-        }
-
-        sequencer.stop()
-    }
-
-    deinit {
-        engine.stop()
     }
 }

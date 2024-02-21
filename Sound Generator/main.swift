@@ -8,7 +8,7 @@
 import Foundation
 
 // Create dataset directory
-let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v0")
+let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v1")
 
 let instruments = [
     InstrumentSpec(
@@ -34,24 +34,25 @@ let instruments = [
     )
 ]
 
-let generator = try SampleGenerator()
+let renderer = try SampleRenderer()
+let generator = EventGenerator()
 
 for instrument in instruments {
-    try generator.useInstrument(instrumentPack: instrument.url)
+    try renderer.useInstrument(instrumentPack: instrument.url)
 
-    for key in instrument.lowKey...instrument.highKey {
-        generator.clearTracks()
+    for i in 0..<100 {
+        renderer.clearTracks()
 
-        for (index, velocity) in [10, 40, 80, 127].enumerated() {
-            generator.stage(note: Note(time: Double(index), duration: 1.0, key: UInt8(key), velocity: UInt8(velocity)))
+        for midiEvent in generator.generate(instrumentSpec: instrument) {
+            renderer.stage(note: midiEvent)
         }
 
-        let fileName = "\(instrument.category)_\(instrument.sampleName)_\(key)"
+        let fileName = "\(instrument.category)_\(instrument.sampleName)_\(i)"
         let aacOutputFile = datasetDirectory.appending(path: "\(fileName).aac")
         let csvOutputFile = datasetDirectory.appending(path: "\(fileName).csv")
 
-        let csvString = noteEventsToCsv(notes: try generator.getStagedEvents())
+        let csvString = noteEventsToCsv(notes: try renderer.getStagedEvents())
         try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
-        try generator.generateAac(outputUrl: aacOutputFile)
+        try renderer.generateAac(outputUrl: aacOutputFile)
     }
 }
