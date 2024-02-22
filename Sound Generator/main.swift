@@ -40,7 +40,7 @@ let generator = EventGenerator()
 for instrument in instruments {
     try renderer.useInstrument(instrumentPack: instrument.url)
 
-    for i in 0..<100 {
+    for i in 0..<10000 {
         renderer.clearTracks()
 
         for midiEvent in generator.generate(instrumentSpec: instrument) {
