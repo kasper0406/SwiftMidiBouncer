@@ -34,25 +34,63 @@ let instruments = [
     )
 ]
 
-let renderer = try SampleRenderer()
-let generator = EventGenerator()
+let operationQueue = OperationQueue()
+operationQueue.maxConcurrentOperationCount = 2
 
+func createTemporaryCopyOfFile(originalFilePath: URL) throws -> URL {
+    let fileManager = FileManager.default
+
+    // Get the temporary directory
+    let tempDirectoryURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+
+    // Generate a unique file name (you can also use a more specific name or extension)
+    let tempFileURL = tempDirectoryURL.appendingPathComponent(UUID().uuidString)
+
+    // Copy the original file to the temporary file path
+    try fileManager.copyItem(atPath: originalFilePath.path, toPath: tempFileURL.path)
+    return tempFileURL
+}
+
+var numTasks: Int64 = 0
 for instrument in instruments {
-    try renderer.useInstrument(instrumentPack: instrument.url)
-
     for i in 0..<10000 {
-        renderer.clearTracks()
+        let task = BlockOperation {
+            do {
+                let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
 
-        for midiEvent in generator.generate(instrumentSpec: instrument) {
-            renderer.stage(note: midiEvent)
+                let renderer = try SampleRenderer()
+                try renderer.useInstrument(instrumentPack: instrumentCopy)
+                renderer.clearTracks()
+
+                let generator = EventGenerator()
+
+                for midiEvent in generator.generate(instrumentSpec: instrument) {
+                    renderer.stage(note: midiEvent)
+                }
+
+                let fileName = "\(instrument.category)_\(instrument.sampleName)_\(i)"
+                let aacOutputFile = datasetDirectory.appending(path: "\(fileName).aac")
+                let csvOutputFile = datasetDirectory.appending(path: "\(fileName).csv")
+
+                let csvString = noteEventsToCsv(notes: try renderer.getStagedEvents())
+                try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
+                try renderer.generateAac(outputUrl: aacOutputFile)
+
+                try FileManager.default.removeItem(at: instrumentCopy)
+            } catch let error {
+                print("Failed to generate audio: \(error)")
+            }
         }
-
-        let fileName = "\(instrument.category)_\(instrument.sampleName)_\(i)"
-        let aacOutputFile = datasetDirectory.appending(path: "\(fileName).aac")
-        let csvOutputFile = datasetDirectory.appending(path: "\(fileName).csv")
-
-        let csvString = noteEventsToCsv(notes: try renderer.getStagedEvents())
-        try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
-        try renderer.generateAac(outputUrl: aacOutputFile)
+        operationQueue.addOperation(task)
+        numTasks += 1
     }
 }
+operationQueue.progress.totalUnitCount = numTasks
+
+while !operationQueue.progress.isFinished {
+    let progress = operationQueue.progress
+    print("Completed \(progress.completedUnitCount) of \(progress.totalUnitCount) tasks")
+    sleep(1)
+}
+
+operationQueue.waitUntilAllOperationsAreFinished()
