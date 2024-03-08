@@ -8,7 +8,7 @@
 import Foundation
 
 // Create dataset directory
-let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v1")
+let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v2/")
 
 let instruments = [
     InstrumentSpec(
@@ -33,7 +33,7 @@ let instruments = [
         sampleName: "candp"
     )
 ]
-let samplesPerInstrument = 50000
+let samplesPerInstrument = 50
 let totalSamples = instruments.count * samplesPerInstrument
 
 let renderer = try SampleRenderer()
@@ -45,6 +45,14 @@ func updateLine(with newText: String) {
     print(newText, terminator: "")
     fflush(stdout) // Ensure the output is immediately displayed
 }
+
+// TODO: Release events may happen after 5 seconds!!!
+// TODO: We do not input any low-register keys!!!
+// TODO: Individual note durations
+// TODO: Measure duration and attack times in beats and pick a tempo for generation -> Humanize the result
+// TODO: Add additional ways of playing (fx scales)
+// TODO: Make sure ascending and descending order of play is equally likely
+// TODO: Make sure there are some dense and fast sequences
 
 updateLine(with: "Generating samples...")
 var count = 0
