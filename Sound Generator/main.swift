@@ -7,8 +7,16 @@
 
 import Foundation
 
+if CommandLine.arguments.count != 4 {
+    print("This program must be used as ./sound_generator <dataset> <partition_number> <samples_per_instrument>")
+    exit(1)
+}
+let dataset = CommandLine.arguments[1]
+let partitionNumber = CommandLine.arguments[2]
+let samplesPerInstrument = Int(CommandLine.arguments[3])!
+
 // Create dataset directory
-let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/v2/")
+let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-to-sound/\(dataset)/")
 
 let instruments = [
     InstrumentSpec(
@@ -33,8 +41,9 @@ let instruments = [
         sampleName: "candp"
     )
 ]
-let samplesPerInstrument = 50
 let totalSamples = instruments.count * samplesPerInstrument
+
+print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
 
 let renderer = try SampleRenderer()
 let generator = EventGenerator()
@@ -57,26 +66,25 @@ func updateLine(with newText: String) {
 updateLine(with: "Generating samples...")
 var count = 0
 for instrument in instruments {
-    try renderer.useInstrument(instrumentPack: instrument.url)
+    let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
+    try renderer.useInstrument(instrumentPack: instrumentCopy)
 
     for i in 0..<samplesPerInstrument {
         renderer.clearTracks()
 
-        for midiEvent in generator.generate(instrumentSpec: instrument) {
-            renderer.stage(note: midiEvent)
-        }
+        generator.generate(instrumentSpec: instrument, renderer: renderer)
 
         let instrumentName = "\(instrument.category)_\(instrument.sampleName)"
         let fileName = "\(instrumentName)_\(i)"
-        // Maximum of 5000 files in one directory
-        let datasetPartition = datasetDirectory.appending(path: "\(instrumentName)_\(i / 5000)")
+
+        let datasetPartition = datasetDirectory.appending(path: "\(instrumentName)_\(partitionNumber)")
         if !FileManager.default.fileExists(atPath: datasetPartition.path) {
             try FileManager.default.createDirectory(at: datasetPartition, withIntermediateDirectories: false)
         }
         let aacOutputFile = datasetPartition.appending(path: "\(fileName).aac")
         let csvOutputFile = datasetPartition.appending(path: "\(fileName).csv")
 
-        let csvString = noteEventsToCsv(notes: try renderer.getStagedEvents())
+        let csvString = noteEventsToCsv(events: try renderer.getStagedEvents())
         try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
         try renderer.generateAac(outputUrl: aacOutputFile)
 
@@ -84,4 +92,6 @@ for instrument in instruments {
         let completionPercent = (Double(count) / Double(totalSamples)) * 100
         updateLine(with: "\(String(format: "%.3f", completionPercent))% complete")
     }
+
+    try FileManager.default.removeItem(at: instrumentCopy)
 }

@@ -66,7 +66,7 @@ enum PlayType: CaseIterable {
 
     func generateIntervals() -> [Int] {
         let invertionsTransform = InvertionsTransformer()
-        var transformations: [IntervalTransformation] = [IntervalDupOrDrop(), IntervalReverser(), IntervalSwapper()]
+        let transformations: [IntervalTransformation] = [IntervalDupOrDrop(), IntervalReverser(), IntervalSwapper()]
 
         var intervals = switch self {
         case .appegioChord:
@@ -157,15 +157,15 @@ class IntervalSwapper: IntervalTransformation {
     }
 }
 
+func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
+    let u1 = Double.random(in: 0..<1)
+    let u2 = Double.random(in: 0..<1)
+
+    let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
+    return z0 * standardDeviation + mean
+}
+
 class InvertionsTransformer: IntervalTransformation {
-    func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
-        let u1 = Double.random(in: 0..<1)
-        let u2 = Double.random(in: 0..<1)
-
-        let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
-        return z0 * standardDeviation + mean
-    }
-
     func apply(intervals: [Int]) -> [Int] {
         // The interval is always relative to middle C.
         // On a piano we have ~4 octaves on either side to use
@@ -307,28 +307,50 @@ func selectElement<T>(from elements: [T], basedOn probabilities: [Double]) -> T?
     return nil
 }
 
-func durationFromNoteValue(noteValue: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
-    let durationForFullNote = (60.0 / tempo) * Double(timeSignature.noteValue)
-    return durationForFullNote * noteValue
+func beatsFromNoteValue(noteValue: Double, timeSignature: TimeSignature) -> Double {
+    return noteValue * Double(timeSignature.noteValue)
 }
 
 func goToNextBar(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
-    let durationOfBar = (60.0 / tempo) * Double(timeSignature.notesPerBar)
-    let rest = currentTime.truncatingRemainder(dividingBy: durationOfBar)
+    let rest = currentTime.truncatingRemainder(dividingBy: Double(timeSignature.notesPerBar))
     return currentTime + rest
+}
+
+func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
+    let stdDivInSeconds = sqrt(Double.random(in: 0.05..<0.3))
+    let stdDiv = stdDivInSeconds / (tempo / 60.0)
+
+    var humanized: [Note] = []
+    for event in events {
+        humanized.append(Note(
+            time: roundToDecimal(max(0.0, generateGaussianRandom(mean: event.time, standardDeviation: stdDiv)), places: 1),
+            duration: roundToDecimal(max(0.1, generateGaussianRandom(mean: event.duration, standardDeviation: stdDiv)), places: 1),
+            key: event.key,
+            velocity: event.velocity
+        ))
+    }
+
+    return humanized
 }
 
 class EventGenerator {
 
-    func generate(instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
+    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
         let timeSignature = TimeSignature(
             notesPerBar: Int.random(in: 2...12),
             noteValue: [2, 4, 8].randomElement()!)
-        let tempo = Double.random(in: 60.0...160.0)
-        return generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec, maxDuration: maxDuration)
+        let tempo = round(Double.random(in: 60.0...160.0))
+
+        let events = generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec, maxDuration: maxDuration)
+
+        renderer.setTempoAndTimeSignature(tempo: tempo, timeSignature: timeSignature)
+        for event in events {
+            renderer.stage(note: event)
+        }
     }
 
-    func generate(timeSignature: TimeSignature, tempo: Double, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.5) -> [Note] {
+    func generate(timeSignature: TimeSignature, tempo: Double, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
+        let maxDurationInBeats = (tempo / 60.0) * maxDuration // Beats per second * seconds = beats
         var events: [Note] = []
 
         var time = 0.0
@@ -340,30 +362,30 @@ class EventGenerator {
             let keys = convertToInstrumentKeys(instrumentSpec: instrumentSpec, intervals: intervals)
 
             for key in keys {
-                if time >= maxDuration {
+                if time >= maxDurationInBeats {
                     break
                 }
-                let velocity = UInt8.random(in: 10..<128)
+                let velocity = UInt8.random(in: 20..<128)
                 let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
                                               basedOn: [ 0.15, 0.2, 0.2, 0.3, 0.075, 0.05, 0.025 ])!
 
-                var durationInSeconds = durationFromNoteValue(noteValue: noteValue, timeSignature: timeSignature, tempo: tempo)
-                if let _currentEndTiem = currentlyPlayingKeys[key] {
+                var durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
+                if currentlyPlayingKeys[key] != nil {
                     // Skip this key as it is already playing
                     continue
                 }
-                currentlyPlayingKeys[key] = time + durationInSeconds
-                if time + durationInSeconds > maxDuration {
-                    durationInSeconds = maxDuration - time
+                currentlyPlayingKeys[key] = time + durationInBeats
+                if time + durationInBeats > maxDuration {
+                    durationInBeats = maxDurationInBeats - time
                 }
 
-                events.append(Note(time: time, duration: durationInSeconds, key: UInt8(key), velocity: velocity))
+                events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
                 if playType != PlayType.harmonicChord {
                     // In 80% the cases increment the time by some amount
                     if Double.random(in: 0..<1.0) < 0.8 {
                         let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
                                                       basedOn: [ 0.15, 0.2, 0.2, 0.3, 0.075, 0.05, 0.025 ])!
-                        time += waitTime
+                        time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
                     }
                 }
 
@@ -377,6 +399,6 @@ class EventGenerator {
             keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
         }
 
-        return events
+        return humanizeEvents(events, tempo: tempo)
     }
 }
