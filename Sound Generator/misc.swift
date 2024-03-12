@@ -42,7 +42,7 @@ func roundToDecimal(_ value: Double, places: Int) -> Double {
 }
 
 func beatsToSeconds(_ beats: Double, _ tempo: Double) -> Double {
-    return roundToDecimal(beats / (tempo / 60.0), places: 1)
+    return roundToDecimal(beats / (tempo / 60.0), places: 2)
 }
 
 func noteEventsToCsv(events: [MidiEvent]) -> String {

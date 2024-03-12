@@ -43,7 +43,7 @@ let instruments = [
 ]
 let totalSamples = instruments.count * samplesPerInstrument
 
-print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
+// print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
 
 let renderer = try SampleRenderer()
 let generator = EventGenerator()
@@ -63,7 +63,7 @@ func updateLine(with newText: String) {
 // TODO: Make sure ascending and descending order of play is equally likely
 // TODO: Make sure there are some dense and fast sequences
 
-updateLine(with: "Generating samples...")
+// updateLine(with: "Generating samples...")
 var count = 0
 for instrument in instruments {
     let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)

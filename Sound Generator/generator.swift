@@ -311,9 +311,14 @@ func beatsFromNoteValue(noteValue: Double, timeSignature: TimeSignature) -> Doub
     return noteValue * Double(timeSignature.noteValue)
 }
 
-func goToNextBar(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
-    let rest = currentTime.truncatingRemainder(dividingBy: Double(timeSignature.notesPerBar))
+func goToNextHalfMeasure(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
+    let halfMeasureDuration = Double(timeSignature.notesPerBar) / 2.0
+    let rest = halfMeasureDuration - currentTime.truncatingRemainder(dividingBy: halfMeasureDuration)
     return currentTime + rest
+}
+
+func measureFromTime(_ time: Double, _ timeSignature: TimeSignature) -> Int {
+    return Int(floor(time / Double(timeSignature.notesPerBar)))
 }
 
 func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
@@ -333,12 +338,27 @@ func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
     return humanized
 }
 
+func sampleTimeSignature() -> TimeSignature {
+    let possibilities: [TimeSignature] = [
+        TimeSignature(notesPerBar: 4, noteValue: 4),
+        TimeSignature(notesPerBar: 3, noteValue: 4),
+        TimeSignature(notesPerBar: 2, noteValue: 4),
+        TimeSignature(notesPerBar: 2, noteValue: 2),
+        TimeSignature(notesPerBar: 3, noteValue: 8),
+        TimeSignature(notesPerBar: 6, noteValue: 8),
+        TimeSignature(notesPerBar: 9, noteValue: 8),
+        TimeSignature(notesPerBar: 12, noteValue: 8),
+        TimeSignature(notesPerBar: 5, noteValue: 4),
+        TimeSignature(notesPerBar: 6, noteValue: 4)
+    ]
+
+    return possibilities.randomElement()!
+}
+
 class EventGenerator {
 
     func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
-        let timeSignature = TimeSignature(
-            notesPerBar: Int.random(in: 2...12),
-            noteValue: [2, 4, 8].randomElement()!)
+        let timeSignature = sampleTimeSignature()
         let tempo = round(Double.random(in: 60.0...160.0))
 
         let events = generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec, maxDuration: maxDuration)
@@ -355,14 +375,19 @@ class EventGenerator {
 
         var time = 0.0
         var currentlyPlayingKeys: [ Int: Double ] = [:] // Map from key playing until end duration in seconds
-        while time < maxDuration && (events.isEmpty || Double.random(in: 0..<1) < 0.95) {
+        while time < maxDurationInBeats && (events.isEmpty || Double.random(in: 0..<1) < 0.999) {
             let playType = PlayType.allCases.randomElement()!
             let intervals = playType.generateIntervals()
 
             let keys = convertToInstrumentKeys(instrumentSpec: instrumentSpec, intervals: intervals)
 
+            var startMeasure = measureFromTime(time, timeSignature)
             for key in keys {
                 if time >= maxDurationInBeats {
+                    break
+                }
+                if measureFromTime(time, timeSignature) > startMeasure {
+                    // We will generate a new set of beats for the next measure
                     break
                 }
                 let velocity = UInt8.random(in: 20..<128)
@@ -393,7 +418,9 @@ class EventGenerator {
                 let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
                 keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
             }
-            time = goToNextBar(currentTime: time, timeSignature: timeSignature, tempo: tempo)
+            if measureFromTime(time, timeSignature) <= startMeasure {
+                time = goToNextHalfMeasure(currentTime: time, timeSignature: timeSignature, tempo: tempo)
+            }
             // Clean up the currently playing keys
             let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
             keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
