@@ -392,7 +392,7 @@ class EventGenerator {
                 }
                 let velocity = UInt8.random(in: 20..<128)
                 let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                              basedOn: [ 0.15, 0.2, 0.2, 0.3, 0.075, 0.05, 0.025 ])!
+                                              basedOn: [ 0.215, 0.2, 0.2, 0.3, 0.075, 0.009, 0.001 ])!
 
                 var durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
                 if currentlyPlayingKeys[key] != nil {
@@ -409,7 +409,7 @@ class EventGenerator {
                     // In 80% the cases increment the time by some amount
                     if Double.random(in: 0..<1.0) < 0.8 {
                         let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                                      basedOn: [ 0.15, 0.2, 0.2, 0.3, 0.075, 0.05, 0.025 ])!
+                                                      basedOn: [ 0.215, 0.2, 0.2, 0.3, 0.075, 0.009, 0.001 ])!
                         time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
                     }
                 }

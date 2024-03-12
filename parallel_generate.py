@@ -8,7 +8,7 @@ import time
 executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
 
 dataset = "v2"
-workers = 8
+workers = 14
 
 partitions = 100
 samples_per_partition = 1000
@@ -35,17 +35,24 @@ progress = ThreadSafeDict()
 print(f"Generating a total of {partitions * samples_per_partition} samples...")
 def generate_partition(partition):
     global progress
-    program = [executable, dataset, str(partition), str(samples_per_partition)]
-    process = subprocess.Popen(program, stdout=subprocess.PIPE, text=True)
 
-    while True:
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-        if output.strip():
-            number_str = output.strip().rstrip('% complete')
-            percentage_complete = float(number_str)
-            progress.set(partition, percentage_complete)
+    successful = False
+    while not successful:
+        program = [executable, dataset, str(partition), str(samples_per_partition)]
+        process = subprocess.Popen(program, stdout=subprocess.PIPE, text=True)
+
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output.strip():
+                number_str = output.strip().rstrip('% complete')
+                percentage_complete = float(number_str)
+                progress.set(partition, percentage_complete)
+
+        successful = process.poll() == 0 # We are successful if the program terminated with code 0
+        if not successful:
+            print(f"Partition {partition} failed. Trying again...")
 
     return None
 
