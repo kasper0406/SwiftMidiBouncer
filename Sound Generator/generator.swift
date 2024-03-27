@@ -158,8 +158,8 @@ class IntervalSwapper: IntervalTransformation {
 }
 
 func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
-    let u1 = Double.random(in: 0..<1)
-    let u2 = Double.random(in: 0..<1)
+    let u1 = Double.random(in: Double.ulpOfOne...1)
+    let u2 = Double.random(in: Double.ulpOfOne...1)
 
     let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
     return z0 * standardDeviation + mean
@@ -167,14 +167,14 @@ func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
 
 class InvertionsTransformer: IntervalTransformation {
     func apply(intervals: [Int]) -> [Int] {
-        // The interval is always relative to middle C.
+        // The interval is always relative to the middel octave.
         // On a piano we have ~4 octaves on either side to use
         // We pick an integer around 0 according to a normal distribution (favoring playing in the middle registers),
         // and then re-sample the intervals
         var newInterval: [Int] = []
         for interval in intervals {
-            let shift = Int(round(generateGaussianRandom(mean: 0.0, standardDeviation: 2.5)))
-            newInterval.append(shift * 12 + interval)
+            let shift = Int(round(generateGaussianRandom(mean: 0.0, standardDeviation: 1.5)))
+            newInterval.append(12 * shift + interval)
         }
         return newInterval
     }
@@ -228,17 +228,18 @@ class ModeScaleTransform: IntervalTransformation {
 func convertToInstrumentKeys(instrumentSpec: InstrumentSpec, intervals: [Int]) -> [Int] {
     var keys: [Int] = []
 
+    let scaleOffset = 12 / 2
     let middleKey = (instrumentSpec.lowKey + instrumentSpec.highKey) / 2
-    let startingKey = Int.random(in: 0..<12)
+    let startingKey = Int.random(in: -6..<6)
 
     for interval in intervals {
-        let key = middleKey + startingKey + interval
+        let key = middleKey + startingKey + interval - scaleOffset
         if key < instrumentSpec.lowKey {
-            let offset = ceil((Double(instrumentSpec.lowKey) - Double(key)) / 12.0) * 12
-            keys.append(key + Int(offset))
+//            let offset = ceil((Double(instrumentSpec.lowKey) - Double(key)) / 12.0) * 12
+//            keys.append(key + Int(offset))
         } else if key > instrumentSpec.highKey {
-            let offset = ceil((Double(key) - Double(instrumentSpec.highKey)) / 12.0) * 12
-            keys.append(key - Int(offset))
+//            let offset = ceil((Double(key) - Double(instrumentSpec.highKey)) / 12.0) * 12
+//            keys.append(key - Int(offset))
         } else {
             keys.append(key)
         }
@@ -327,9 +328,11 @@ func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
 
     var humanized: [Note] = []
     for event in events {
+        // This can lead to a note being played again that has not been released!
+        // The release event may happen after the maximum time (probably not an issue)
         humanized.append(Note(
-            time: roundToDecimal(max(0.0, generateGaussianRandom(mean: event.time, standardDeviation: stdDiv)), places: 1),
-            duration: roundToDecimal(max(0.1, generateGaussianRandom(mean: event.duration, standardDeviation: stdDiv)), places: 1),
+            time: max(0.0, generateGaussianRandom(mean: event.time, standardDeviation: stdDiv)),
+            duration: max(0.1, generateGaussianRandom(mean: event.duration, standardDeviation: stdDiv)),
             key: event.key,
             velocity: event.velocity
         ))
@@ -400,14 +403,11 @@ class EventGenerator {
                     continue
                 }
                 currentlyPlayingKeys[key] = time + durationInBeats
-                if time + durationInBeats > maxDuration {
-                    durationInBeats = maxDurationInBeats - time
-                }
 
                 events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
                 if playType != PlayType.harmonicChord {
-                    // In 80% the cases increment the time by some amount
-                    if Double.random(in: 0..<1.0) < 0.8 {
+                    // In 60% the cases increment the time by some amount
+                    if Double.random(in: 0..<1.0) < 0.6 {
                         let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
                                                       basedOn: [ 0.215, 0.2, 0.2, 0.3, 0.075, 0.009, 0.001 ])!
                         time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)

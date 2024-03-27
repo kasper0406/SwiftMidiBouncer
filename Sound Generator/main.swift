@@ -32,14 +32,14 @@ let instruments = [
         highKey: 108,
         category: "piano",
         sampleName: "BechsteinFelt"
-    ),
+    )/*
     InstrumentSpec(
         url: URL(fileURLWithPath: "/Volumes/git/ESX24/violin_candp/violin_candp.exs"),
         lowKey: 55,
         highKey: 105,
         category: "violin",
         sampleName: "candp"
-    )
+    ) */
 ]
 let totalSamples = instruments.count * samplesPerInstrument
 

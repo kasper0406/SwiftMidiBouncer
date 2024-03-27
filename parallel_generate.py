@@ -1,17 +1,16 @@
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 import threading
 import sys
 import time
 
 executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
 
-dataset = "v2"
+dataset = "v3_small"
 workers = 14
 
-partitions = 100
-samples_per_partition = 1000
+partitions = 1000
+samples_per_partition = 500
 
 class ThreadSafeDict:
     def __init__(self):
@@ -53,6 +52,7 @@ def generate_partition(partition):
         successful = process.poll() == 0 # We are successful if the program terminated with code 0
         if not successful:
             print(f"Partition {partition} failed. Trying again...")
+            progress.set(partition, 0.0)
 
     return None
 
