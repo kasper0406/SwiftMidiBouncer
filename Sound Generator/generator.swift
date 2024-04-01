@@ -16,28 +16,78 @@ enum Chord: CaseIterable {
     case single
 
     func intervals() -> [Int] {
-        switch self {
+        let baseIntervals = switch self {
         case .major:
-            return [0, 4, 7, 12]
+            [0, 4, 7, 12]
         case .minor:
-            return [0, 3, 7, 12]
+            [0, 3, 7, 12]
         case .diminished:
-            return [0, 3, 6, 12]
+            [0, 3, 6, 12]
         case .augmented:
-            return [0, 4, 8, 12]
+            [0, 4, 8, 12]
         case .random:
             // TODO(knielsen): Consider making this have a dynamic number of intervals
-            return [Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12)]
+            [Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12)]
         case .single:
-            return [0]
+            [0]
         }
+        return TransformTo7thChord.allCases.randomElement()!.apply(intervals: baseIntervals)
+    }
+}
+
+enum Scale: CaseIterable {
+    case diatonic
+    case wholeTone
+    case pentatonicMajor
+    case pentatnoicBlues
+    case random
+
+    func intervals() -> [Int] {
+        let intervals = switch self {
+        case .diatonic:
+            [0, 2, 4, 5, 7, 9, 11, 12]
+        case .wholeTone:
+            [0, 2, 4, 6, 8, 10, 12]
+        case .pentatonicMajor:
+            [0, 2, 4, 7, 9]
+        case .pentatnoicBlues:
+            [0, 2, 5, 7, 9]
+        case .random:
+            [Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12)]
+        }
+        return ModeScaleTransform().apply(intervals: intervals)
     }
 }
 
 enum PlayType: CaseIterable {
-    case appegio
-    case harmonic
-    // case Tripolet
+    case appegioChord
+    case harmonicChord
+    case scale
+
+    func generateIntervals() -> [Int] {
+        let invertionsTransform = InvertionsTransformer()
+        let transformations: [IntervalTransformation] = [IntervalDupOrDrop(), IntervalReverser(), IntervalSwapper()]
+
+        var intervals = switch self {
+        case .appegioChord:
+            Chord.allCases.randomElement()!.intervals()
+        case .harmonicChord:
+            Chord.allCases.randomElement()!.intervals()
+        case .scale:
+            Scale.allCases.randomElement()!.intervals()
+        }
+
+        // Apply transformations at random until we either have 10 intervals to play or we throw a 20% dice
+        let maxIntervalLength = 10
+        while intervals.count < maxIntervalLength && Double.random(in: 0..<1) < 0.8 {
+            let transform = transformations.randomElement()!
+            intervals = transform.apply(intervals: intervals)
+            intervals = Array(intervals.prefix(upTo: min(intervals.count, maxIntervalLength + 1)))
+        }
+        // Always apply the invertions transformer to use all of the available keys
+        intervals = invertionsTransform.apply(intervals: intervals)
+        return intervals
+    }
 }
 
 func addInterval(interval: Int, intervals: [Int]) -> [Int] {
@@ -51,11 +101,14 @@ protocol IntervalTransformation {
 }
 
 enum TransformTo7thChord: CaseIterable, IntervalTransformation {
+    case none
     case major7
     case minor7
 
     func apply(intervals: [Int]) -> [Int] {
         switch self {
+        case .none:
+            return intervals
         case .major7:
             return addInterval(interval: 11, intervals: intervals)
         case .minor7:
@@ -82,24 +135,91 @@ class IntervalDupOrDrop: IntervalTransformation {
     }
 }
 
-class InvertionsTransformer: IntervalTransformation {
-    func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
-        let u1 = Double.random(in: 0..<1)
-        let u2 = Double.random(in: 0..<1)
-
-        let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
-        return z0 * standardDeviation + mean
-    }
-
+class IntervalReverser: IntervalTransformation {
     func apply(intervals: [Int]) -> [Int] {
-        // The interval is always relative to middle C.
+        return intervals.reversed()
+    }
+}
+
+class IntervalSwapper: IntervalTransformation {
+    func apply(intervals: [Int]) -> [Int] {
+        var shuffled = intervals
+        for i in 0..<max(0, (shuffled.count - 1)) {
+            if Double.random(in: 0..<1.0) < 0.3 {
+                // Flip if we throw a 30% dice, otherwise do nothing
+                let tmp = shuffled[i]
+                shuffled[i] = shuffled[i + 1]
+                shuffled[i + 1] = tmp
+            }
+        }
+
+        return shuffled
+    }
+}
+
+func generateGaussianRandom(mean: Double, standardDeviation: Double) -> Double {
+    let u1 = Double.random(in: Double.ulpOfOne...1)
+    let u2 = Double.random(in: Double.ulpOfOne...1)
+
+    let z0 = sqrt(-2.0 * log(u1)) * cos(2.0 * .pi * u2)
+    return z0 * standardDeviation + mean
+}
+
+class InvertionsTransformer: IntervalTransformation {
+    func apply(intervals: [Int]) -> [Int] {
+        // The interval is always relative to the middel octave.
         // On a piano we have ~4 octaves on either side to use
         // We pick an integer around 0 according to a normal distribution (favoring playing in the middle registers),
         // and then re-sample the intervals
         var newInterval: [Int] = []
         for interval in intervals {
-            let shift = Int(round(generateGaussianRandom(mean: 0.0, standardDeviation: 1.0)))
-            newInterval.append(shift * 12 + interval)
+            let shift = Int(round(generateGaussianRandom(mean: 0.0, standardDeviation: 1.5)))
+            newInterval.append(12 * shift + interval)
+        }
+        return newInterval
+    }
+}
+
+enum Mode: CaseIterable {
+    case ionian
+    case dorian
+    case phrygian
+    case lydian
+    case mixolydian
+    case aeolian
+    case locrian
+
+    func replacements() -> [Int: Int] {
+        switch self {
+        case .ionian:
+            return [:]
+        case .dorian:
+            return [ 4: 3, 11: 10 ] // Flatten E and B
+        case .phrygian:
+            return [ 2: 1, 4: 3, 9: 8, 11: 10 ] // Flatten A, B, D, E
+        case .lydian:
+            return [ 5: 6 ] // Sharpen F
+        case .mixolydian:
+            return [ 11: 10 ] // Flatten B
+        case .aeolian:
+            return [ 5: 4, 11: 10, 9: 8 ] // Flatten E, B, A
+        case .locrian:
+            return [ 2: 1, 4: 3, 7: 6, 9: 8, 11: 10 ] // Flatten G, A, B, D, E
+        }
+    }
+}
+
+class ModeScaleTransform: IntervalTransformation {
+    func apply(intervals: [Int]) -> [Int] {
+        let replacements = Mode.allCases.randomElement()!.replacements()
+
+        var newInterval: [Int] = []
+        for interval in intervals {
+            if let replacement = replacements[interval] {
+                newInterval.append(replacement)
+            } else {
+                newInterval.append(interval)
+            }
         }
         return newInterval
     }
@@ -108,17 +228,18 @@ class InvertionsTransformer: IntervalTransformation {
 func convertToInstrumentKeys(instrumentSpec: InstrumentSpec, intervals: [Int]) -> [Int] {
     var keys: [Int] = []
 
+    let scaleOffset = 12 / 2
     let middleKey = (instrumentSpec.lowKey + instrumentSpec.highKey) / 2
-    let startingKey = Int.random(in: 0..<12)
+    let startingKey = Int.random(in: -6..<6)
 
     for interval in intervals {
-        let key = middleKey + startingKey + interval
+        let key = middleKey + startingKey + interval - scaleOffset
         if key < instrumentSpec.lowKey {
-            let offset = ceil((Double(instrumentSpec.lowKey) - Double(key)) / 12.0) * 12
-            keys.append(key + Int(offset))
+//            let offset = ceil((Double(instrumentSpec.lowKey) - Double(key)) / 12.0) * 12
+//            keys.append(key + Int(offset))
         } else if key > instrumentSpec.highKey {
-            let offset = ceil((Double(key) - Double(instrumentSpec.highKey)) / 12.0) * 12
-            keys.append(key - Int(offset))
+//            let offset = ceil((Double(key) - Double(instrumentSpec.highKey)) / 12.0) * 12
+//            keys.append(key - Int(offset))
         } else {
             keys.append(key)
         }
@@ -141,63 +262,170 @@ func makeIntervalsUnique(intervals: [Int]) -> [Int] {
     return unique
 }
 
-class EventGenerator {
+struct TimeSignature {
+    var notesPerBar: Int
+    var noteValue: Int
+}
 
-    let invertionsTransform = InvertionsTransformer()
-    var transformations: [IntervalTransformation]
+func randomSampleByElementWeight(values: [Double]) -> Double? {
+    let transformedWeights = values.map { 1 / $0 }
+    // Calculate the total sum of the transformed weights
+    let totalWeightSum = transformedWeights.reduce(0, +)
 
-    init() {
-        self.transformations = [IntervalDupOrDrop()] + TransformTo7thChord.allCases
+    // Generate a random number in the range [0, totalWeightSum)
+    let randomNumber = Double.random(in: 0..<totalWeightSum)
+
+    // Iterate over the values to find where the random number fits using transformed weights
+    var runningSum = 0.0
+    for (index, weight) in transformedWeights.enumerated() {
+        runningSum += weight
+        if randomNumber < runningSum {
+            return values[index]
+        }
+    }
+    return nil
+}
+
+func selectElement<T>(from elements: [T], basedOn probabilities: [Double]) -> T? {
+    // Check if the number of elements matches the number of probabilities
+    guard elements.count == probabilities.count else { return nil }
+
+    // Generate a random number between 0 and 1
+    let randomNumber = Double.random(in: 0...1)
+
+    // Iterate through the probabilities
+    var cumulativeProbability = 0.0
+    for (index, probability) in probabilities.enumerated() {
+        cumulativeProbability += probability
+
+        // Check if the random number falls within the current cumulative probability
+        if randomNumber <= cumulativeProbability {
+            return elements[index]
+        }
     }
 
-    func generate(instrumentSpec: InstrumentSpec, maxDuration: Double = 4.5) -> [Note] {
+    // In case no element is selected (should not happen if probabilities sum to 1)
+    return nil
+}
+
+func beatsFromNoteValue(noteValue: Double, timeSignature: TimeSignature) -> Double {
+    return noteValue * Double(timeSignature.noteValue)
+}
+
+func goToNextHalfMeasure(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
+    let halfMeasureDuration = Double(timeSignature.notesPerBar) / 2.0
+    let rest = halfMeasureDuration - currentTime.truncatingRemainder(dividingBy: halfMeasureDuration)
+    return currentTime + rest
+}
+
+func measureFromTime(_ time: Double, _ timeSignature: TimeSignature) -> Int {
+    return Int(floor(time / Double(timeSignature.notesPerBar)))
+}
+
+func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
+    let stdDivInSeconds = sqrt(Double.random(in: 0.05..<0.3))
+    let stdDiv = stdDivInSeconds / (tempo / 60.0)
+
+    var humanized: [Note] = []
+    for event in events {
+        // This can lead to a note being played again that has not been released!
+        // The release event may happen after the maximum time (probably not an issue)
+        humanized.append(Note(
+            time: max(0.0, generateGaussianRandom(mean: event.time, standardDeviation: stdDiv)),
+            duration: max(0.1, generateGaussianRandom(mean: event.duration, standardDeviation: stdDiv)),
+            key: event.key,
+            velocity: event.velocity
+        ))
+    }
+
+    return humanized
+}
+
+func sampleTimeSignature() -> TimeSignature {
+    let possibilities: [TimeSignature] = [
+        TimeSignature(notesPerBar: 4, noteValue: 4),
+        TimeSignature(notesPerBar: 3, noteValue: 4),
+        TimeSignature(notesPerBar: 2, noteValue: 4),
+        TimeSignature(notesPerBar: 2, noteValue: 2),
+        TimeSignature(notesPerBar: 3, noteValue: 8),
+        TimeSignature(notesPerBar: 6, noteValue: 8),
+        TimeSignature(notesPerBar: 9, noteValue: 8),
+        TimeSignature(notesPerBar: 12, noteValue: 8),
+        TimeSignature(notesPerBar: 5, noteValue: 4),
+        TimeSignature(notesPerBar: 6, noteValue: 4)
+    ]
+
+    return possibilities.randomElement()!
+}
+
+class EventGenerator {
+
+    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
+        let timeSignature = sampleTimeSignature()
+        let tempo = round(Double.random(in: 60.0...160.0))
+
+        let events = generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec, maxDuration: maxDuration)
+
+        renderer.setTempoAndTimeSignature(tempo: tempo, timeSignature: timeSignature)
+        for event in events {
+            renderer.stage(note: event)
+        }
+    }
+
+    func generate(timeSignature: TimeSignature, tempo: Double, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
+        let maxDurationInBeats = (tempo / 60.0) * maxDuration // Beats per second * seconds = beats
         var events: [Note] = []
 
         var time = 0.0
-        while time < maxDuration && (events.isEmpty || Double.random(in: 0..<1) < 0.95) {
+        var currentlyPlayingKeys: [ Int: Double ] = [:] // Map from key playing until end duration in seconds
+        while time < maxDurationInBeats && (events.isEmpty || Double.random(in: 0..<1) < 0.999) {
             let playType = PlayType.allCases.randomElement()!
-            let chord = Chord.allCases.randomElement()!
-
-            // The duration in seconds per key
-            // TODO(knielsen): Make this be handled by every key in the chord
-            let keyDuration = Double.random(in: 0.1..<2.0)
-
-            // TODO(knielsen): Support transposing and other transformations on the intervals
-            var intervals = chord.intervals()
-
-            // Apply transformations at random until we either have 10 intervals to play or we throw a 20% dice
-            let maxIntervalLength = 10
-            while intervals.count < maxIntervalLength && Double.random(in: 0..<1) < 0.8 {
-                let transform = transformations.randomElement()!
-                intervals = transform.apply(intervals: intervals)
-                intervals = Array(intervals.prefix(upTo: min(intervals.count, maxIntervalLength + 1)))
-            }
-            // Always apply the invertions transformer to use all of the available keys
-            intervals = invertionsTransform.apply(intervals: intervals)
-            if playType == PlayType.harmonic {
-                intervals = makeIntervalsUnique(intervals: intervals)
-            }
+            let intervals = playType.generateIntervals()
 
             let keys = convertToInstrumentKeys(instrumentSpec: instrumentSpec, intervals: intervals)
+
+            var startMeasure = measureFromTime(time, timeSignature)
             for key in keys {
-                if time >= maxDuration {
+                if time >= maxDurationInBeats {
                     break
                 }
-                let velocity = UInt8.random(in: 10..<128)
-
-                events.append(Note(time: time, duration: keyDuration, key: UInt8(key), velocity: velocity))
-                if playType == PlayType.appegio {
-                    time += keyDuration
+                if measureFromTime(time, timeSignature) > startMeasure {
+                    // We will generate a new set of beats for the next measure
+                    break
                 }
-            }
-            if playType == PlayType.harmonic {
-                time += keyDuration
-            }
+                let velocity = UInt8.random(in: 20..<128)
+                let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                              basedOn: [ 0.215, 0.2, 0.2, 0.3, 0.075, 0.009, 0.001 ])!
 
-            let delay = Double.random(in: 0..<0.5)
-            time += delay
+                var durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
+                if currentlyPlayingKeys[key] != nil {
+                    // Skip this key as it is already playing
+                    continue
+                }
+                currentlyPlayingKeys[key] = time + durationInBeats
+
+                events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
+                if playType != PlayType.harmonicChord {
+                    // In 60% the cases increment the time by some amount
+                    if Double.random(in: 0..<1.0) < 0.6 {
+                        let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                                      basedOn: [ 0.215, 0.2, 0.2, 0.3, 0.075, 0.009, 0.001 ])!
+                        time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
+                    }
+                }
+
+                // Clean up the currently playing keys
+                let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
+                keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
+            }
+            if measureFromTime(time, timeSignature) <= startMeasure {
+                time = goToNextHalfMeasure(currentTime: time, timeSignature: timeSignature, tempo: tempo)
+            }
+            // Clean up the currently playing keys
+            let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
+            keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
         }
 
-        return events
+        return humanizeEvents(events, tempo: tempo)
     }
 }
