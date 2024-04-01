@@ -20,26 +20,28 @@ let datasetDirectory: URL = URL(fileURLWithPath: "/Volumes/git/ml/datasets/midi-
 
 let instruments = [
     InstrumentSpec(
-        url: URL(fileURLWithPath: "/Volumes/git/ESX24/piano_YamahaC7/YamahaC7.exs"),
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/yamaha_grand.exs"),
         lowKey: 21,
         highKey: 108,
         category: "piano",
-        sampleName: "YamahaC7"
+        sampleName: "yamaha_grand",
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
-        url: URL(fileURLWithPath: "/Volumes/git/ESX24/piano_BechsteinFelt/piano_BechsteinFelt.exs"),
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/grand_piano.exs"),
         lowKey: 21,
         highKey: 108,
         category: "piano",
-        sampleName: "BechsteinFelt"
-    )/*
+        sampleName: "grand_piano"
+    ),
     InstrumentSpec(
-        url: URL(fileURLWithPath: "/Volumes/git/ESX24/violin_candp/violin_candp.exs"),
-        lowKey: 55,
-        highKey: 105,
-        category: "violin",
-        sampleName: "candp"
-    ) */
+        url: URL(fileURLWithPath: "/Volumes/git/ESX24/bosendorfer_grand.exs"),
+        lowKey: 21,
+        highKey: 108,
+        category: "piano",
+        sampleName: "bosendorfer_grand",
+        gainCorrection: -14.0
+    )
 ]
 let totalSamples = instruments.count * samplesPerInstrument
 
@@ -55,22 +57,15 @@ func updateLine(with newText: String) {
     fflush(stdout) // Ensure the output is immediately displayed
 }
 
-// TODO: Release events may happen after 5 seconds!!!
-// TODO: We do not input any low-register keys!!!
-// TODO: Individual note durations
-// TODO: Measure duration and attack times in beats and pick a tempo for generation -> Humanize the result
-// TODO: Add additional ways of playing (fx scales)
-// TODO: Make sure ascending and descending order of play is equally likely
-// TODO: Make sure there are some dense and fast sequences
-
 // updateLine(with: "Generating samples...")
 var count = 0
 for instrument in instruments {
     let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
-    try renderer.useInstrument(instrumentPack: instrumentCopy)
+    try renderer.useInstrument(instrumentPack: instrumentCopy, instrument.gainCorrection)
 
     for i in 0..<samplesPerInstrument {
         renderer.clearTracks()
+        renderer.pickRandomEffectPreset()
 
         generator.generate(instrumentSpec: instrument, renderer: renderer)
 

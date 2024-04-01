@@ -112,6 +112,10 @@ class SampleRenderer {
     let sampler: AVAudioUnitSampler
     let sequencer: AVAudioSequencer
 
+    let eq: AVAudioUnitEQ
+    let compressor: AVAudioUnitEffect
+    let reverb: AVAudioUnitReverb
+
     var timeSignature = TimeSignature(notesPerBar: 4, noteValue: 4)
 
     init() throws {
@@ -136,10 +140,27 @@ class SampleRenderer {
         engine = AVAudioEngine()
         sampler = AVAudioUnitSampler()
 
+        eq = AVAudioUnitEQ(numberOfBands: 10)
+        compressor = AVAudioUnitEffect(
+            audioComponentDescription: AudioComponentDescription(
+                componentType: kAudioUnitType_Effect,
+                componentSubType: kAudioUnitSubType_DynamicsProcessor,
+                componentManufacturer: kAudioUnitManufacturer_Apple,
+                componentFlags: 0,
+                componentFlagsMask: 0))
+        reverb = AVAudioUnitReverb()
+
         // Setup the engine
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
         engine.attach(sampler)
-        engine.connect(sampler, to: engine.mainMixerNode, format: format)
+        engine.attach(eq)
+        engine.attach(compressor)
+        engine.attach(reverb)
+
+        engine.connect(sampler, to: eq, format: format)
+        engine.connect(eq, to: compressor, format: format)
+        engine.connect(compressor, to: reverb, format: format)
+        engine.connect(reverb, to: engine.mainMixerNode, format: format)
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: format)
         try engine.start()
 
@@ -147,8 +168,50 @@ class SampleRenderer {
         sequencer = AVAudioSequencer(audioEngine: engine)
     }
 
-    func useInstrument(instrumentPack: URL) throws {
+    func pickRandomEffectPreset() {
+        // Eq
+        let a = Double.random(in: 0.5...1)
+        let b = Double.random(in: 0.5...1)
+        let numBands: Double = Double(eq.bands.endIndex + 1)
+        for (i, band) in eq.bands.enumerated() {
+            let fraction: Double = 4 * Double.pi
+            let wave1: Double = sin((a * numBands * Double(i)) / fraction)
+            let wave2: Double = sin((b * 2 * numBands * Double(i)) / fraction)
+            band.gain = Float(3 * (wave1 + wave2))
+        }
+
+        // Compressor
+        // Global, dB, -40->20, -20
+        let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
+        thresholdParameter.setValue(Float.random(in: -30...10), originator: nil)
+
+        // Global, dB, 0.1->40.0, 5
+        let headRoomParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_HeadRoom))!
+        headRoomParameter.setValue(Float.random(in: 0.5...20), originator: nil)
+
+        // Global, rate, 1->50.0, 2
+        let expansionRatioParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ExpansionRatio))!
+        expansionRatioParameter.setValue(Float.random(in: 1.0...30.0), originator: nil)
+
+        // Global, secs, 0.0001->0.2, 0.001
+        let attackTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_AttackTime))!
+        attackTimeParameter.setValue(Float.random(in: 0.0005...0.01), originator: nil)
+
+        // Global, secs, 0.01->3, 0.05
+        let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
+        releaseTimeParameter.setValue(Float.random(in: 0.01...1.0), originator: nil)
+
+        // Reverb
+        reverb.loadFactoryPreset(.init(rawValue: (0...12).randomElement()!)!)
+        reverb.wetDryMix = Float.random(in: 0...100)
+    }
+
+    func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
+        sampler.overallGain = 0.0
+        if let gain = gainCorrection {
+            sampler.overallGain = gain
+        }
     }
 
     func setTempoAndTimeSignature(tempo: Double, timeSignature: TimeSignature) {
