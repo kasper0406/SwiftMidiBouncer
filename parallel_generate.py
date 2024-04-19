@@ -3,14 +3,15 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 import sys
 import time
+import os
 
 executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
 
-dataset = "v3_small"
+dataset = "/Volumes/git/ml/datasets/midi-to-sound/narrowed_keys_5"
 workers = 14
 
-partitions = 1000
-samples_per_partition = 500
+partitions = 3
+samples_per_partition = 10
 
 class ThreadSafeDict:
     def __init__(self):
@@ -29,6 +30,7 @@ class ThreadSafeDict:
         with self.lock:
             return self.dict.copy()
 
+os.makedirs(dataset, exist_ok=True)
 progress = ThreadSafeDict()
 
 print(f"Generating a total of {partitions * samples_per_partition} samples...")

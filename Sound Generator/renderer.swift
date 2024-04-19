@@ -103,6 +103,8 @@ class SampleRenderer {
     let format: AVAudioFormat
     let maxFrames: AVAudioFrameCount = 4096
 
+    var generate_cutoff: Double? // If set, do not generate more than x seconds of audio
+
     // File export settings
     let wavSettings: [String: Any]
     let aacSettings: [String: Any]
@@ -168,8 +170,13 @@ class SampleRenderer {
         sequencer = AVAudioSequencer(audioEngine: engine)
     }
 
+    func setCutoff(_ cutoff: Double) {
+        self.generate_cutoff = cutoff
+    }
+
     func pickRandomEffectPreset() {
         // Eq
+        eq.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
         let a = Double.random(in: 0.5...1)
         let b = Double.random(in: 0.5...1)
         let numBands: Double = Double(eq.bands.endIndex + 1)
@@ -181,6 +188,7 @@ class SampleRenderer {
         }
 
         // Compressor
+        compressor.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
         // Global, dB, -40->20, -20
         let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
         thresholdParameter.setValue(Float.random(in: -30...10), originator: nil)
@@ -202,6 +210,7 @@ class SampleRenderer {
         releaseTimeParameter.setValue(Float.random(in: 0.01...1.0), originator: nil)
 
         // Reverb
+        reverb.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
         reverb.loadFactoryPreset(.init(rawValue: (0...12).randomElement()!)!)
         reverb.wetDryMix = Float.random(in: 0...100)
     }
@@ -230,6 +239,7 @@ class SampleRenderer {
             sequencer.createAndAppendTrack()
         }
         let track = sequencer.tracks[0]
+
         let noteMidiEvent = AVMIDINoteEvent(
             channel: 0,
             key: UInt32(note.key),
@@ -240,6 +250,10 @@ class SampleRenderer {
 
     func loadFromMidiFile(midiFileURL: URL) throws {
         try sequencer.load(from: midiFileURL)
+    }
+
+    func writeMidiFile(midiFileURL: URL) throws {
+        try sequencer.write(to: midiFileURL, smpteResolution: 0, replaceExisting: true)
     }
 
     /**
@@ -330,6 +344,9 @@ class SampleRenderer {
             track.destinationAudioUnit = sampler
             maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
         }
+        if let cutoff = self.generate_cutoff {
+            maxTrackLengthInSeconds = min(cutoff, maxTrackLengthInSeconds)
+        }
 
         try sequencer.start()
         while sequencer.isPlaying && sequencer.currentPositionInSeconds < maxTrackLengthInSeconds {
@@ -353,6 +370,7 @@ class SampleRenderer {
         }
 
         sequencer.stop()
+        engine.reset()
     }
 
     deinit {
