@@ -117,6 +117,7 @@ class SampleRenderer {
     let eq: AVAudioUnitEQ
     let compressor: AVAudioUnitEffect
     let reverb: AVAudioUnitReverb
+    let timePitch: AVAudioUnitTimePitch
 
     var timeSignature = TimeSignature(notesPerBar: 4, noteValue: 4)
 
@@ -151,15 +152,18 @@ class SampleRenderer {
                 componentFlags: 0,
                 componentFlagsMask: 0))
         reverb = AVAudioUnitReverb()
+        timePitch = AVAudioUnitTimePitch()
 
         // Setup the engine
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
         engine.attach(sampler)
+        engine.attach(timePitch)
         engine.attach(eq)
         engine.attach(compressor)
         engine.attach(reverb)
 
-        engine.connect(sampler, to: eq, format: format)
+        engine.connect(sampler, to: timePitch, format: format)
+        engine.connect(timePitch, to: eq, format: format)
         engine.connect(eq, to: compressor, format: format)
         engine.connect(compressor, to: reverb, format: format)
         engine.connect(reverb, to: engine.mainMixerNode, format: format)
@@ -191,28 +195,32 @@ class SampleRenderer {
         compressor.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
         // Global, dB, -40->20, -20
         let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
-        thresholdParameter.setValue(Float.random(in: -30...10), originator: nil)
+        thresholdParameter.setValue(Float.random(in: -40...10), originator: nil)
 
         // Global, dB, 0.1->40.0, 5
         let headRoomParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_HeadRoom))!
-        headRoomParameter.setValue(Float.random(in: 0.5...20), originator: nil)
+        headRoomParameter.setValue(Float.random(in: 0.5...30), originator: nil)
 
         // Global, rate, 1->50.0, 2
         let expansionRatioParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ExpansionRatio))!
-        expansionRatioParameter.setValue(Float.random(in: 1.0...30.0), originator: nil)
+        expansionRatioParameter.setValue(Float.random(in: 1.0...40.0), originator: nil)
 
         // Global, secs, 0.0001->0.2, 0.001
         let attackTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_AttackTime))!
-        attackTimeParameter.setValue(Float.random(in: 0.0005...0.01), originator: nil)
+        attackTimeParameter.setValue(Float.random(in: 0.0005...0.1), originator: nil)
 
         // Global, secs, 0.01->3, 0.05
         let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
-        releaseTimeParameter.setValue(Float.random(in: 0.01...1.0), originator: nil)
+        releaseTimeParameter.setValue(Float.random(in: 0.01...0.5), originator: nil)
 
         // Reverb
         reverb.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
         reverb.loadFactoryPreset(.init(rawValue: (0...12).randomElement()!)!)
         reverb.wetDryMix = Float.random(in: 0...100)
+
+        // Time pitch
+        timePitch.bypass = Double.random(in: 0.0...1.0) < 0.7 // Bypass 70% of the time
+        timePitch.pitch = Float(Int.random(in: 0...40))
     }
 
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {

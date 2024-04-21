@@ -4,14 +4,19 @@ import threading
 import sys
 import time
 import os
+import json
 
 executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
 
 dataset = "/Volumes/git/ml/datasets/midi-to-sound/narrowed_keys_5"
 workers = 14
 
-partitions = 3
+partitions = 5
 samples_per_partition = 10
+
+progress_file = "generate.state"
+
+shut_down = False
 
 class ThreadSafeDict:
     def __init__(self):
@@ -38,7 +43,7 @@ def generate_partition(partition):
     global progress
 
     successful = False
-    while not successful:
+    while not successful and not shut_down:
         program = [executable, dataset, str(partition), str(samples_per_partition)]
         process = subprocess.Popen(program, stdout=subprocess.PIPE, text=True)
 
@@ -83,20 +88,48 @@ def print_progress_bar(percentage, prefix='', suffix='', decimals=1, length=50, 
 def print_progress():
     global progress
     print_progress_bar(0.0, prefix='Progress:', suffix='Complete', length=50)
-    while True:
-        current_progress = progress.get_all().values()
-        overall_percentage = (sum(current_progress) / len(current_progress)) / 100
+    while not shut_down:
+        current_progress = progress.get_all()
+
+        completed_partitions = [key for key, value in current_progress.items() if value == 100.0]
+        with open(progress_file, 'w+') as file:
+            json.dump(completed_partitions, file)
+        
+        progress_values = current_progress.values()
+        overall_percentage = 0.0
+        if len(progress_values) != 0:
+            overall_percentage = (sum(progress_values) / len(progress_values)) / 100
         print_progress_bar(overall_percentage, prefix='Progress:', suffix='Complete', length=50)
+
         if overall_percentage == 1.0:
             break
 
         time.sleep(0.5)
-        
+
+def load_completed_partitions():
+    try:
+        with open(progress_file, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []
 
 with ThreadPoolExecutor(max_workers=(workers + 1)) as executor:
-    all_partitions = range(partitions)
-    for partition in all_partitions:
-        progress.set(partition, 0.0)
+    try:
+        all_partitions = range(partitions)
+        completed_partitions = load_completed_partitions()
+        for partition in all_partitions:
+            progress.set(partition, 0.0 if partition not in completed_partitions else 100.0)
 
-    status_future = executor.submit(print_progress)
-    results = list(executor.map(generate_partition, all_partitions))
+        status_future = executor.submit(print_progress)
+
+        missing_partitions = [ partition for partition in all_partitions if partition not in completed_partitions ]
+        results = list(executor.map(generate_partition, missing_partitions))
+
+        # Wait for the status future to finish before we remove the progress file
+        status_future.result()
+        os.remove(progress_file)
+    except KeyboardInterrupt:
+        shut_down = True
+        print("Shutting down executor...")
+        executor.shutdown(wait = True, cancel_futures=True)
+        print("Executor has been shut down!")
