@@ -225,7 +225,7 @@ class SampleRenderer {
 
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
-        sampler.overallGain = 0.0
+        sampler.overallGain = 8.0
         if let gain = gainCorrection {
             sampler.overallGain = gain
         }

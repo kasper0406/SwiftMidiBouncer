@@ -7,7 +7,7 @@
 
 import Foundation
 
-let max_simultanious_notes = 10
+let max_simultanious_notes = 5
 
 enum Chord: CaseIterable {
     case major
@@ -83,11 +83,10 @@ enum PlayType: CaseIterable {
             Scale.allCases.randomElement()!.intervals()
         }
 
-        // Apply transformations at random until we either have `max_simultanious_notes` intervals to play or we throw a 20% dice
-        while intervals.count < max_simultanious_notes && Double.random(in: 0..<1) < 0.9 {
+        // Apply a bunch of transforms
+        while intervals.count < 2 || Double.random(in: 0..<1) < 0.95 {
             let transform = transformations.randomElement()!
             intervals = transform.apply(intervals: intervals)
-            intervals = Array(intervals.prefix(upTo: min(intervals.count, max_simultanious_notes)))
         }
         // Always apply the invertions transformer to use all of the available keys
         intervals = invertionsTransform.apply(intervals: intervals)
@@ -143,6 +142,9 @@ class IntervalDupOrDrop: IntervalTransformation {
 class IntervalRandomInserter: IntervalTransformation {
     func apply(intervals: [Int]) -> [Int] {
         var transformed: [Int] = []
+        if Double.random(in: 0..<1) < 0.2 {
+            transformed.append(Int.random(in: 0...12))
+        }
         for interval in intervals {
             transformed.append(interval)
             // Insert a random interval with 20% probability
@@ -248,15 +250,15 @@ func convertToInstrumentKeys(instrumentSpec: InstrumentSpec, intervals: [Int]) -
     var keys: [Int] = []
 
     let scaleOffset = 12 / 2
-    let middleKey = (instrumentSpec.lowKey + instrumentSpec.highKey) / 2
+    let middleKey = (instrumentSpec.keyRange.lowerBound + instrumentSpec.keyRange.upperBound) / 2
     let startingKey = Int.random(in: -6..<6)
 
     for interval in intervals {
         let key = middleKey + startingKey + interval - scaleOffset
-        if key < instrumentSpec.lowKey {
+        if key < instrumentSpec.keyRange.lowerBound {
 //            let offset = ceil((Double(instrumentSpec.lowKey) - Double(key)) / 12.0) * 12
 //            keys.append(key + Int(offset))
-        } else if key > instrumentSpec.highKey {
+        } else if key > instrumentSpec.keyRange.upperBound {
 //            let offset = ceil((Double(key) - Double(instrumentSpec.highKey)) / 12.0) * 12
 //            keys.append(key - Int(offset))
         } else {
@@ -412,22 +414,23 @@ class EventGenerator {
                     // We will generate a new set of beats for the next measure
                     break
                 }
-                if currentlyPlayingKeys.count >= max_simultanious_notes {
+                if currentlyPlayingKeys.count < max_simultanious_notes {
                     // If more than `max_simultanious_notes` notes are playing we don't want to play more...
+                    let velocity = UInt8.random(in: 20..<128)
+                    let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                                  basedOn: [ 0.05, 0.275, 0.340, 0.25, 0.075, 0.009, 0.001 ])!
+
+                    let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
+                    if currentlyPlayingKeys[key] != nil {
+                        // Skip this key as it is already playing
+                        continue
+                    }
+                    currentlyPlayingKeys[key] = time + durationInBeats
+
+                    events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
+                } else if playType == PlayType.harmonicChord {
                     break
                 }
-                let velocity = UInt8.random(in: 20..<128)
-                let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                              basedOn: [ 0.2, 0.225, 0.240, 0.25, 0.075, 0.009, 0.001 ])!
-
-                let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
-                if currentlyPlayingKeys[key] != nil {
-                    // Skip this key as it is already playing
-                    continue
-                }
-                currentlyPlayingKeys[key] = time + durationInBeats
-
-                events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
 
                 if playType != PlayType.harmonicChord {
                     // In 30% the cases increment the time by some amount

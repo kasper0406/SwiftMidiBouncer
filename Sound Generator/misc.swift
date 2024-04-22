@@ -13,14 +13,13 @@ struct InstrumentSpec {
     var url: URL
 
     // Register information in Midi key numbering
-    var lowKey: Int
-    var highKey: Int
+    var keyRange: ClosedRange<Int>
 
     // The name of the instrument
     var category: String // Category, fx `piano, `viloa`, `violin`, etc.
     var sampleName: String // Fx `Yamaha7C`, 'c-and-p`, etc.
 
-    var gainCorrection: Float = 0.0
+    var gainCorrection: Float?
 }
 
 func isBufferAllZeros(buffer: AVAudioPCMBuffer) -> Bool {
