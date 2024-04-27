@@ -161,6 +161,8 @@ class SampleRenderer {
         reverb = AVAudioUnitReverb()
         timePitch = AVAudioUnitTimePitch()
 
+        let outputCompressor = SampleRenderer.configureOutputCompressor()
+
         // Setup the engine
         try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: maxFrames)
         engine.attach(sampler)
@@ -168,13 +170,17 @@ class SampleRenderer {
         engine.attach(eq)
         engine.attach(compressor)
         engine.attach(reverb)
+        engine.attach(outputCompressor)
 
         engine.connect(sampler, to: timePitch, format: format)
         engine.connect(timePitch, to: eq, format: format)
         engine.connect(eq, to: compressor, format: format)
         engine.connect(compressor, to: reverb, format: format)
-        engine.connect(reverb, to: engine.mainMixerNode, format: format)
+        engine.connect(reverb, to: outputCompressor, format: format)
+
+        engine.connect(outputCompressor, to: engine.mainMixerNode, format: format)
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: format)
+
         try engine.start()
 
         // Setup the sequencer
@@ -401,6 +407,29 @@ class SampleRenderer {
 
         sequencer.stop()
         engine.reset()
+    }
+
+    private static func configureOutputCompressor() -> AVAudioUnitEffect {
+        let compressor = AVAudioUnitEffect(
+            audioComponentDescription: AudioComponentDescription(
+                componentType: kAudioUnitType_Effect,
+                componentSubType: kAudioUnitSubType_DynamicsProcessor,
+                componentManufacturer: kAudioUnitManufacturer_Apple,
+                componentFlags: 0,
+                componentFlagsMask: 0))
+
+        let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
+        thresholdParameter.setValue(-20.0, originator: nil)
+        let headRoomParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_HeadRoom))!
+        headRoomParameter.setValue(3.0, originator: nil)
+        let attackTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_AttackTime))!
+        attackTimeParameter.setValue(0.01, originator: nil)
+        let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
+        releaseTimeParameter.setValue(0.05, originator: nil)
+        let overallGainParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_OverallGain))!
+        overallGainParameter.setValue(10.0, originator: nil)
+
+        return compressor
     }
 
     deinit {
