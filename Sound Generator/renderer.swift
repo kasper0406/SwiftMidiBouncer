@@ -12,6 +12,13 @@ import AudioToolbox
 import AVFoundation
 
 /*
+ * TODOs:
+ *   1. Investigate delay in the beginning causing slight shift in audio timing
+ *   2. Generate more samples without a bunch of effects
+ *   3. Generate faster and more complicated sections
+ */
+
+/*
  * `key` is in the range 0 -> 127
  * `velocity` is in the range 0 -> 127
  */
@@ -180,7 +187,7 @@ class SampleRenderer {
 
     func pickRandomEffectPreset() {
         // Eq
-        eq.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
+        eq.bypass = Double.random(in: 0.0...1.0) < 0.3 // Bypass 30% of the time
         let a = Double.random(in: 0.5...1)
         let b = Double.random(in: 0.5...1)
         let numBands: Double = Double(eq.bands.endIndex + 1)
@@ -192,7 +199,7 @@ class SampleRenderer {
         }
 
         // Compressor
-        compressor.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
+        compressor.bypass = Double.random(in: 0.0...1.0) < 0.3 // Bypass 30% of the time
         // Global, dB, -40->20, -20
         let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
         thresholdParameter.setValue(Float.random(in: -40...10), originator: nil)
@@ -214,7 +221,7 @@ class SampleRenderer {
         releaseTimeParameter.setValue(Float.random(in: 0.01...0.5), originator: nil)
 
         // Reverb
-        reverb.bypass = Double.random(in: 0.0...1.0) < 0.2 // Bypass 20% of the time
+        reverb.bypass = Double.random(in: 0.0...1.0) < 0.3 // Bypass 30% of the time
         reverb.loadFactoryPreset(.init(rawValue: (0...12).randomElement()!)!)
         reverb.wetDryMix = Float.random(in: 0...100)
 
@@ -225,7 +232,6 @@ class SampleRenderer {
 
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
-        sampler.overallGain = 8.0
         if let gain = gainCorrection {
             sampler.overallGain = gain
         }
@@ -247,6 +253,21 @@ class SampleRenderer {
             sequencer.createAndAppendTrack()
         }
         let track = sequencer.tracks[0]
+
+        // Ensure that the note is not already being played in the desired time interval
+        // If it is, we will just ignore this staged event
+        var noteAlreadyPlaying = false
+        track.enumerateEvents(in: AVBeatRange(start: note.time, length: note.duration), using: { event, _, _ in
+            if let existingEvent = event as?AVMIDINoteEvent {
+                if existingEvent.key == note.key {
+                    noteAlreadyPlaying = true
+                    return
+                }
+            }
+        })
+        if noteAlreadyPlaying {
+            return
+        }
 
         let noteMidiEvent = AVMIDINoteEvent(
             channel: 0,
@@ -356,6 +377,7 @@ class SampleRenderer {
             maxTrackLengthInSeconds = min(cutoff, maxTrackLengthInSeconds)
         }
 
+        sequencer.prepareToPlay()
         try sequencer.start()
         while sequencer.isPlaying && sequencer.currentPositionInSeconds < maxTrackLengthInSeconds {
             let framesToRender = min(buffer.frameCapacity, engine.manualRenderingMaximumFrameCount)

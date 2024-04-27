@@ -16,8 +16,8 @@ let partitionNumber = CommandLine.arguments[2]
 let samplesPerInstrument = Int(CommandLine.arguments[3])!
 
 let cwd = FileManager.default.currentDirectoryPath
-let pianoKeyRange = 53...84
-// let pianoKeyRange = 21...108
+// let pianoKeyRange = 53...84
+let pianoKeyRange = 21...108
 let instruments = [
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/different_phase_clav.exs"),
@@ -107,8 +107,7 @@ let instruments = [
         url: URL(fileURLWithPath: "\(cwd)/instruments/bosendorfer_grand.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
-        sampleName: "bosendorfer_grand",
-        gainCorrection: 2.0
+        sampleName: "bosendorfer_grand"
     )
 ]
 let totalSamples = instruments.count * samplesPerInstrument
@@ -147,12 +146,14 @@ for instrument in instruments {
             try FileManager.default.createDirectory(at: datasetPartition, withIntermediateDirectories: false)
         }
         let aacOutputFile = datasetPartition.appending(path: "\(fileName).aac")
+        // let wavOutputFile = datasetPartition.appending(path: "\(fileName).wav")
         let csvOutputFile = datasetPartition.appending(path: "\(fileName).csv")
         let midiOutputFile = datasetPartition.appending(path: "\(fileName).mid")
 
         let csvString = noteEventsToCsv(events: try renderer.getStagedEvents())
         try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
         try renderer.generateAac(outputUrl: aacOutputFile)
+        // try renderer.generateWav(outputUrl: wavOutputFile)
         try renderer.writeMidiFile(midiFileURL: midiOutputFile)
 
         count += 1

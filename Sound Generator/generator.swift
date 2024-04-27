@@ -7,8 +7,6 @@
 
 import Foundation
 
-let max_simultanious_notes = 5
-
 enum Chord: CaseIterable {
     case major
     case minor
@@ -18,7 +16,7 @@ enum Chord: CaseIterable {
     case single
 
     func intervals() -> [Int] {
-        let baseIntervals = switch self {
+        var intervals = switch self {
         case .major:
             [0, 4, 7, 12]
         case .minor:
@@ -28,11 +26,13 @@ enum Chord: CaseIterable {
         case .augmented:
             [0, 4, 8, 12]
         case .random:
-            [Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12)]
+            [ Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12) ]
         case .single:
             [0]
         }
-        return TransformTo7thChord.allCases.randomElement()!.apply(intervals: baseIntervals)
+        intervals = TransformTo7thChord.allCases.randomElement()!.apply(intervals: intervals)
+        intervals = SuspendChord.allCases.randomElement()!.apply(intervals: intervals)
+        return intervals
     }
 }
 
@@ -84,7 +84,7 @@ enum PlayType: CaseIterable {
         }
 
         // Apply a bunch of transforms
-        while intervals.count < 2 || Double.random(in: 0..<1) < 0.95 {
+        while intervals.count < 10 || Double.random(in: 0..<1) < 0.95 {
             let transform = transformations.randomElement()!
             intervals = transform.apply(intervals: intervals)
         }
@@ -118,6 +118,31 @@ enum TransformTo7thChord: CaseIterable, IntervalTransformation {
         case .minor7:
             return addInterval(interval: 10, intervals: intervals)
         }
+    }
+}
+
+enum SuspendChord: CaseIterable, IntervalTransformation {
+    case none
+    case sus2
+    case sus4
+
+    func apply(intervals: [Int]) -> [Int] {
+        var transformed: [Int] = []
+        for interval in intervals {
+            if interval != 4 {
+                transformed.append(interval)
+            } else {
+                switch self {
+                case .none:
+                    transformed.append(interval)
+                case .sus2:
+                    transformed.append(2)
+                case .sus4:
+                    transformed.append(5)
+                }
+            }
+        }
+        return transformed
     }
 }
 
@@ -246,13 +271,10 @@ class ModeScaleTransform: IntervalTransformation {
     }
 }
 
-func convertToInstrumentKeys(instrumentSpec: InstrumentSpec, intervals: [Int]) -> [Int] {
+func convertToInstrumentKeys(startingKey: Int, middleKey: Int, instrumentSpec: InstrumentSpec, intervals: [Int]) -> [Int] {
     var keys: [Int] = []
 
     let scaleOffset = 12 / 2
-    let middleKey = (instrumentSpec.keyRange.lowerBound + instrumentSpec.keyRange.upperBound) / 2
-    let startingKey = Int.random(in: -6..<6)
-
     for interval in intervals {
         let key = middleKey + startingKey + interval - scaleOffset
         if key < instrumentSpec.keyRange.lowerBound {
@@ -333,9 +355,9 @@ func beatsFromNoteValue(noteValue: Double, timeSignature: TimeSignature) -> Doub
     return noteValue * Double(timeSignature.noteValue)
 }
 
-func goToNextHalfMeasure(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
-    let halfMeasureDuration = Double(timeSignature.notesPerBar) / 2.0
-    let rest = halfMeasureDuration - currentTime.truncatingRemainder(dividingBy: halfMeasureDuration)
+func goToNextMeasure(currentTime: Double, timeSignature: TimeSignature, tempo: Double) -> Double {
+    let measureDuration = Double(timeSignature.notesPerBar)
+    let rest = measureDuration - currentTime.truncatingRemainder(dividingBy: measureDuration)
     return currentTime + rest
 }
 
@@ -383,9 +405,15 @@ class EventGenerator {
 
     func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
         let timeSignature = sampleTimeSignature()
-        let tempo = round(Double.random(in: 60.0...160.0))
+        let tempo = min(max(40, round(generateGaussianRandom(mean: 115, standardDeviation: 35))), 200)
+        let handNoteComplexity = UInt8.random(in: 1...6) // Allow between 1 and 6 notes per hand playing at the same time
 
-        let events = generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec, maxDuration: maxDuration)
+        let events = generate(
+            timeSignature: timeSignature,
+            tempo: tempo,
+            handNoteComplexity: handNoteComplexity,
+            instrumentSpec: instrumentSpec,
+            maxDuration: maxDuration)
 
         renderer.setTempoAndTimeSignature(tempo: tempo, timeSignature: timeSignature)
         for event in events {
@@ -393,72 +421,102 @@ class EventGenerator {
         }
     }
 
-    func generate(timeSignature: TimeSignature, tempo: Double, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
+    func generate(timeSignature: TimeSignature, tempo: Double, handNoteComplexity: UInt8, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
         let maxDurationInBeats = (tempo / 60.0) * maxDuration // Beats per second * seconds = beats
         var events: [Note] = []
 
         var time = 0.0
-        var currentlyPlayingKeys: [ Int: Double ] = [:] // Map from key playing until end duration in seconds
+
         while time < maxDurationInBeats && (events.isEmpty || Double.random(in: 0..<1) < 0.999) {
-            let playType = PlayType.allCases.randomElement()!
-            let intervals = playType.generateIntervals()
-
-            let keys = convertToInstrumentKeys(instrumentSpec: instrumentSpec, intervals: intervals)
-
             let startMeasure = measureFromTime(time, timeSignature)
-            for key in keys {
-                if time >= maxDurationInBeats {
-                    break
-                }
-                if measureFromTime(time, timeSignature) > startMeasure {
-                    // We will generate a new set of beats for the next measure
-                    break
-                }
-                if currentlyPlayingKeys.count < max_simultanious_notes {
-                    // If more than `max_simultanious_notes` notes are playing we don't want to play more...
-                    let velocity = UInt8.random(in: 20..<128)
-                    let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                                  basedOn: [ 0.05, 0.275, 0.340, 0.25, 0.075, 0.009, 0.001 ])!
 
-                    let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
-                    if currentlyPlayingKeys[key] != nil {
-                        // Skip this key as it is already playing
-                        continue
-                    }
-                    currentlyPlayingKeys[key] = time + durationInBeats
+            let middle = (instrumentSpec.keyRange.lowerBound + instrumentSpec.keyRange.upperBound) / 2
+            let range = instrumentSpec.keyRange.upperBound - instrumentSpec.keyRange.lowerBound
+            let leftMiddle = middle - range / 4
+            let rightMiddle = middle + range / 4
 
-                    events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
-                } else if playType == PlayType.harmonicChord {
-                    break
-                }
+            let startingKey = Int.random(in: -6..<6)
 
-                if playType != PlayType.harmonicChord {
-                    // In 30% the cases increment the time by some amount
-                    if Double.random(in: 0..<1.0) < 0.2 {
-                        let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                                      basedOn: [ 0.2, 0.2, 0.215, 0.3, 0.075, 0.009, 0.001 ])!
-                        time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
-                    }
-                }
+            let leftHand = generateHandForMeasure(time, startingKey, leftMiddle, handNoteComplexity, maxDurationInBeats, instrumentSpec, timeSignature)
+            let rightHand = generateHandForMeasure(time, startingKey, rightMiddle, handNoteComplexity, maxDurationInBeats, instrumentSpec, timeSignature)
 
-                // Clean up the currently playing keys
-                let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
-                keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
-            }
+            events.append(contentsOf: leftHand)
+            events.append(contentsOf: rightHand)
+
             if measureFromTime(time, timeSignature) <= startMeasure {
-                time = goToNextHalfMeasure(currentTime: time, timeSignature: timeSignature, tempo: tempo)
+                time = goToNextMeasure(currentTime: time, timeSignature: timeSignature, tempo: tempo)
             }
-            // Clean up the currently playing keys
-            let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
-            keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
         }
 
         if events.isEmpty {
             // What a hack, but I don't bother fixing it in a nicer way...
             // This should happen quite very rarely to not be a perf or stack concern
-            return generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec)
+            return generate(timeSignature: timeSignature, tempo: tempo, handNoteComplexity: handNoteComplexity, instrumentSpec: instrumentSpec)
         }
 
         return humanizeEvents(events, tempo: tempo)
+    }
+
+    func generateHandForMeasure(_ startTime: Double, _ startingKey: Int, _ middleKey: Int, _ handNoteComplexity: UInt8, _ maxDurationInBeats: Double, _ instrumentSpec: InstrumentSpec, _ timeSignature: TimeSignature) -> [Note] {
+        var events: [Note] = []
+
+        let playType = PlayType.allCases.randomElement()!
+        let intervals = playType.generateIntervals()
+        let keys = convertToInstrumentKeys(startingKey: startingKey, middleKey: middleKey, instrumentSpec: instrumentSpec, intervals: intervals)
+
+        let startMeasure = measureFromTime(startTime, timeSignature)
+        var time = startTime
+
+        // Introduce a possible rest before starting to play in the measure
+        if Double.random(in: 0..<1.0) < 0.2 {
+            let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                         basedOn: [ 0.3, 0.3, 0.215, 0.1, 0.075, 0.009, 0.001 ])!
+            time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
+        }
+
+        // Map from key playing until end duration in seconds to access the complexity
+        var currentlyPlayingKeys: [ Int: Double ] = [:]
+        let repeatedKeys = (0..<10).flatMap { _ in keys } // Repeat the keys to not run out
+        for key in repeatedKeys {
+            if time >= maxDurationInBeats {
+                break
+            }
+            if measureFromTime(time, timeSignature) > startMeasure {
+                // We will generate a new set of beats for the next measure
+                break
+            }
+            if currentlyPlayingKeys.count < handNoteComplexity {
+                // If more than `handNoteComplexity` notes are playing we don't want to play more...
+                let velocity = UInt8.random(in: 20..<128)
+                let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                              basedOn: [ 0.2, 0.275, 0.240, 0.20, 0.075, 0.009, 0.001 ])!
+
+                let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
+                if currentlyPlayingKeys[key] != nil {
+                    // Skip this key as it is already playing
+                    continue
+                }
+                currentlyPlayingKeys[key] = time + durationInBeats
+
+                events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
+            } else if playType == PlayType.harmonicChord {
+                break
+            }
+
+            if playType != PlayType.harmonicChord {
+                // In 30% the cases increment the time by some amount
+                if Double.random(in: 0..<1.0) < 0.3 {
+                    let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
+                                                 basedOn: [ 0.3, 0.3, 0.215, 0.1, 0.075, 0.009, 0.001 ])!
+                    time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
+                }
+            }
+
+            // Clean up the currently playing keys
+            let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
+            keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
+        }
+
+        return events
     }
 }

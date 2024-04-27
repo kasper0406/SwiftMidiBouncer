@@ -8,10 +8,10 @@ import json
 
 executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
 
-dataset = "/Volumes/git/ml/datasets/midi-to-sound/narrowed_keys_6"
+dataset = "/Volumes/git/ml/datasets/midi-to-sound/narrowed_keys_7"
 workers = 14
 
-partitions = 200
+partitions = 400
 samples_per_partition = 50
 
 progress_file = "generate.state"
