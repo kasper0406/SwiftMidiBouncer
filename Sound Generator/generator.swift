@@ -366,7 +366,7 @@ func measureFromTime(_ time: Double, _ timeSignature: TimeSignature) -> Int {
 }
 
 func humanizeEvents(_ events: [Note], tempo: Double) -> [Note] {
-    let stdDivInSeconds = sqrt(Double.random(in: 0.1..<0.5))
+    let stdDivInSeconds = sqrt(Double.random(in: 0.0..<0.3))
     let stdDiv = stdDivInSeconds / (tempo / 60.0)
 
     var humanized: [Note] = []
@@ -403,15 +403,15 @@ func sampleTimeSignature() -> TimeSignature {
 
 class EventGenerator {
 
+    let noteValues = [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ]
+
     func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
         let timeSignature = sampleTimeSignature()
         let tempo = min(max(40, round(generateGaussianRandom(mean: 115, standardDeviation: 35))), 200)
-        let handNoteComplexity = UInt8.random(in: 1...6) // Allow between 1 and 6 notes per hand playing at the same time
 
         let events = generate(
             timeSignature: timeSignature,
             tempo: tempo,
-            handNoteComplexity: handNoteComplexity,
             instrumentSpec: instrumentSpec,
             maxDuration: maxDuration)
 
@@ -421,7 +421,7 @@ class EventGenerator {
         }
     }
 
-    func generate(timeSignature: TimeSignature, tempo: Double, handNoteComplexity: UInt8, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
+    func generate(timeSignature: TimeSignature, tempo: Double, instrumentSpec: InstrumentSpec, maxDuration: Double = 4.9) -> [Note] {
         let maxDurationInBeats = (tempo / 60.0) * maxDuration // Beats per second * seconds = beats
         var events: [Note] = []
 
@@ -437,8 +437,15 @@ class EventGenerator {
 
             let startingKey = Int.random(in: -6..<6)
 
-            let leftHand = generateHandForMeasure(time, startingKey, leftMiddle, handNoteComplexity, maxDurationInBeats, instrumentSpec, timeSignature)
-            let rightHand = generateHandForMeasure(time, startingKey, rightMiddle, handNoteComplexity, maxDurationInBeats, instrumentSpec, timeSignature)
+            // Allow between 1 and 6 notes per hand playing at the same time
+            let leftHandComplexity = UInt8.random(in: 1...6)
+            let rightHandComplexity = UInt8.random(in: 1...6)
+
+            let leftHandValueDist = noteValueProbDist()
+            let rightHandValueDist = noteValueProbDist()
+
+            let leftHand = generateHandForMeasure(time, startingKey, leftMiddle, leftHandComplexity, leftHandValueDist, maxDurationInBeats, instrumentSpec, timeSignature)
+            let rightHand = generateHandForMeasure(time, startingKey, rightMiddle, rightHandComplexity, rightHandValueDist, maxDurationInBeats, instrumentSpec, timeSignature)
 
             events.append(contentsOf: leftHand)
             events.append(contentsOf: rightHand)
@@ -451,13 +458,13 @@ class EventGenerator {
         if events.isEmpty {
             // What a hack, but I don't bother fixing it in a nicer way...
             // This should happen quite very rarely to not be a perf or stack concern
-            return generate(timeSignature: timeSignature, tempo: tempo, handNoteComplexity: handNoteComplexity, instrumentSpec: instrumentSpec)
+            return generate(timeSignature: timeSignature, tempo: tempo, instrumentSpec: instrumentSpec)
         }
 
         return humanizeEvents(events, tempo: tempo)
     }
 
-    func generateHandForMeasure(_ startTime: Double, _ startingKey: Int, _ middleKey: Int, _ handNoteComplexity: UInt8, _ maxDurationInBeats: Double, _ instrumentSpec: InstrumentSpec, _ timeSignature: TimeSignature) -> [Note] {
+    func generateHandForMeasure(_ startTime: Double, _ startingKey: Int, _ middleKey: Int, _ handNoteComplexity: UInt8, _ noteValueDist: [Double], _ maxDurationInBeats: Double, _ instrumentSpec: InstrumentSpec, _ timeSignature: TimeSignature) -> [Note] {
         var events: [Note] = []
 
         let playType = PlayType.allCases.randomElement()!
@@ -468,9 +475,9 @@ class EventGenerator {
         var time = startTime
 
         // Introduce a possible rest before starting to play in the measure
-        if Double.random(in: 0..<1.0) < 0.2 {
-            let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                         basedOn: [ 0.3, 0.3, 0.215, 0.1, 0.075, 0.009, 0.001 ])!
+        if Double.random(in: 0..<1.0) < 0.5 {
+            let waitTime = selectElement(from: noteValues,
+                                         basedOn: noteValueDist)!
             time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
         }
 
@@ -487,9 +494,9 @@ class EventGenerator {
             }
             if currentlyPlayingKeys.count < handNoteComplexity {
                 // If more than `handNoteComplexity` notes are playing we don't want to play more...
-                let velocity = UInt8.random(in: 20..<128)
-                let noteValue = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                              basedOn: [ 0.2, 0.275, 0.240, 0.20, 0.075, 0.009, 0.001 ])!
+                let velocity = UInt8.random(in: 30..<128)
+                let noteValue = selectElement(from: noteValues,
+                                              basedOn: noteValueDist)!
 
                 let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
                 if currentlyPlayingKeys[key] != nil {
@@ -506,8 +513,8 @@ class EventGenerator {
             if playType != PlayType.harmonicChord {
                 // In 30% the cases increment the time by some amount
                 if Double.random(in: 0..<1.0) < 0.3 {
-                    let waitTime = selectElement(from: [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ],
-                                                 basedOn: [ 0.3, 0.3, 0.215, 0.1, 0.075, 0.009, 0.001 ])!
+                    let waitTime = selectElement(from: noteValues,
+                                                 basedOn: noteValueDist)!
                     time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
                 }
             }
@@ -518,5 +525,17 @@ class EventGenerator {
         }
 
         return events
+    }
+
+    private func noteValueProbDist() -> [Double] {
+        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.5, standardDeviation: 1.0)))
+        let variance = 0.5 * mean
+
+        let expectation = noteValues.map({ value in -0.5 * pow((value - mean) / variance, 2) })
+            .map({ value in max(value, -10.0) }) // Below values of -10 we will assume the exponential will give 0
+            .map(exp)
+        let sum = expectation.reduce(0.0, +)
+
+        return expectation.map({ value in value / sum })
     }
 }

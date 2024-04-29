@@ -427,7 +427,7 @@ class SampleRenderer {
         let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
         releaseTimeParameter.setValue(0.05, originator: nil)
         let overallGainParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_OverallGain))!
-        overallGainParameter.setValue(10.0, originator: nil)
+        overallGainParameter.setValue(6.0, originator: nil)
 
         return compressor
     }
