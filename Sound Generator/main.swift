@@ -7,6 +7,8 @@
 
 import Foundation
 
+// TODO: Piano Perfect mix volume can be ultra low
+
 if CommandLine.arguments.count < 3 {
     print("This program must be used as ./sound_generator {generate_random, from_midi} <output_dir> ...")
     print("  if generate_random: ./sound_generator generate_random <output_dir> <partition_number> <samples_per_instrument>")
