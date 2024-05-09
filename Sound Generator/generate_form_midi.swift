@@ -60,7 +60,7 @@ func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDire
                 try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
                 try renderer.generateAac(outputUrl: aacOutputFile)
             }
-            renderer.transpose(trackSelect: track, amount: -transpositions.count)
+            renderer.transpose(trackSelect: track, amount: -transpositions.upperBound)
         }
 
         try FileManager.default.removeItem(at: instrumentCopy)
