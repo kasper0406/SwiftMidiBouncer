@@ -287,19 +287,30 @@ class SampleRenderer {
         try sequencer.write(to: midiFileURL, smpteResolution: 0, replaceExisting: true)
     }
 
+    func transpose(trackSelect: Int, amount: Int) {
+        let track = sequencer.tracks[trackSelect]
+        track.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, _, _ in
+            if let midiEvent = event as?AVMIDINoteEvent {
+                midiEvent.key = UInt32(Int(midiEvent.key) + amount)
+            }
+        })
+    }
+
     /**
      Returns all the staged nodes ordered by the time they start playing
      */
-    func getStagedEvents() throws -> [MidiEvent] {
+    func getStagedEvents(trackSelect: Int = 0) throws -> [MidiEvent] {
         if sequencer.tracks.isEmpty {
             return []
         }
-        let track = sequencer.tracks[0]
+        let track = sequencer.tracks[trackSelect]
 
         var events: [MidiEvent] = []
         var encounteredUnknownEvent = false
+        var foundNoteEvents = false
         track.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, timestamp, _ in
             if let midiEvent = event as?AVMIDINoteEvent {
+                foundNoteEvents = true
                 events.append(MidiEvent.NoteEvent(timestamp.pointee, Note(
                     time: timestamp.pointee,
                     duration: midiEvent.duration,
@@ -311,6 +322,10 @@ class SampleRenderer {
                 encounteredUnknownEvent = true
             }
         })
+
+        if !foundNoteEvents {
+            return []
+        }
 
         sequencer.tempoTrack.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, timestamp, _ in
             if let tempoEvent = event as?AVExtendedTempoEvent {
@@ -332,10 +347,21 @@ class SampleRenderer {
         })
 
         if encounteredUnknownEvent {
-            throw NSError(domain: "SampleGenerator", code: 1, userInfo: nil)
+            print("Warning: Encountered unknown event")
+            // throw NSError(domain: "SampleGenerator", code: 1, userInfo: nil)
         }
 
         return events.sorted()
+    }
+
+    func getTrackCount() -> Int {
+        return sequencer.tracks.count
+    }
+
+    func soloTrack(trackSelect: Int? = nil) {
+        for (i, track) in sequencer.tracks.enumerated() {
+            track.isSoloed = trackSelect == i
+        }
     }
 
     func clearTracks() {
@@ -372,8 +398,12 @@ class SampleRenderer {
         sequencer.currentPositionInSeconds = 0
         var maxTrackLengthInSeconds = 0.0
         sequencer.tracks.forEach { track in
-            track.destinationAudioUnit = sampler
-            maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
+            if track.isMuted {
+                track.destinationAudioUnit = nil
+            } else {
+                track.destinationAudioUnit = sampler
+                maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
+            }
         }
         if let cutoff = self.generate_cutoff {
             maxTrackLengthInSeconds = min(cutoff, maxTrackLengthInSeconds)
