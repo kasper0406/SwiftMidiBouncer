@@ -7,6 +7,10 @@
 
 import Foundation
 
+// TODO:
+//   Generated note 78 playing twice at the same time in dual_hands/piano_yamaha_grand_key_pitch_78/piano_yamaha_grand_key_pitch_14.csv !!!
+//   Mellow vibe piano seems to do weird things with its sound...
+
 if CommandLine.arguments.count != 4 {
     print("This program must be used as ./sound_generator <dataset_dir> <partition_number> <samples_per_instrument>")
     exit(1)
@@ -16,106 +20,103 @@ let partitionNumber = CommandLine.arguments[2]
 let samplesPerInstrument = Int(CommandLine.arguments[3])!
 
 let cwd = FileManager.default.currentDirectoryPath
-// let pianoKeyRange = 53...84
 let pianoKeyRange = 21...108
 let instruments = [
+    InstrumentSpec(
+        url: URL(fileURLWithPath: "\(cwd)/instruments/vibraphone_keys.exs"),
+        keyRange: pianoKeyRange,
+        category: "keys",
+        sampleName: "vibraphone",
+        gainCorrection: -4.0
+    ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/different_phase_clav.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "different_phase_clav",
-        gainCorrection: 4.0
+        gainCorrection: -6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/perfect_mix_piano.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
-        sampleName: "perfect_mix_piano",
-        gainCorrection: 12.0
+        sampleName: "perfect_mix_piano"
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/learners_piano.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "learners_piano",
-        gainCorrection: 8.0
+        gainCorrection: 2.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/pure_digital_keys.exs"),
         keyRange: pianoKeyRange,
         category: "keys",
-        sampleName: "pure_digital",
-        gainCorrection: 8.0
-    ),
-    InstrumentSpec(
-        url: URL(fileURLWithPath: "\(cwd)/instruments/mellow_vibe_piano.exs"),
-        keyRange: pianoKeyRange,
-        category: "keys",
-        sampleName: "mellow_vibe_piano",
-        gainCorrection: 12.0
+        sampleName: "pure_digital"
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/80_keyboard.exs"),
         keyRange: pianoKeyRange,
         category: "keys",
         sampleName: "80_keyboard",
-        gainCorrection: -2.0
+        gainCorrection: -4.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_cutoff_velocity.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_cutoff_velocity",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_filter_pitch.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_filter_pitch",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_tuned_up.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_tuned_up",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_tuned_down.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_tuned_down",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_like_steinway.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_like_steinway",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand_key_pitch.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "yamaha_grand_key_pitch",
-        gainCorrection: 10.0
+        gainCorrection: 6.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/grand_piano.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "grand_piano",
-        gainCorrection: 8.0
+        gainCorrection: 4.0
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/bosendorfer_grand.exs"),
