@@ -19,7 +19,8 @@ func transpositionRange(_ instrument: InstrumentSpec, _ events: [MidiEvent]) -> 
     }
     let lowerBound = -(minNote - instrument.keyRange.lowerBound)
     let upperBound = instrument.keyRange.upperBound - maxNote
-    return lowerBound ... upperBound
+    // Limit the transposition range to 12 keys (an octave) in either direction
+    return max(-12, lowerBound) ... min(upperBound, 12)
 }
 
 func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDirectory: URL) throws {

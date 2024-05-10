@@ -42,15 +42,25 @@ struct Note: Comparable {
     }
 }
 
+enum EffectSettingsDescription {
+    case Eq(String)
+    case Compressor(String)
+    case Reverb(String)
+    case TimePitch(String)
+}
+
 enum Message {
     case Tempo(Double)
     case TimeSignature(TimeSignature)
+    case EffectSettings(EffectSettingsDescription)
 
     func order() -> Int {
         switch self {
         case .Tempo:
             return 0
         case .TimeSignature:
+            return 1
+        case .EffectSettings:
             return 2
         }
     }
@@ -232,6 +242,46 @@ class SampleRenderer {
         timePitch.pitch = Float(Int.random(in: 0...40))
     }
 
+    private func getEffectSettingsEvents() -> [Message] {
+        // Eq
+        var eqSettings = "bypass=\(eq.bypass)"
+        eqSettings += ",bands="
+        for (i, band) in eq.bands.enumerated() {
+            eqSettings += String(format: "%.2f", band.gain)
+            if i != eq.bands.count - 1 {
+                eqSettings += ","
+            }
+        }
+        let eqEvent = Message.EffectSettings(EffectSettingsDescription.Eq(eqSettings))
+
+        // Compressor
+        var compressorSettings = "bypass=\(compressor.bypass)"
+        let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
+        compressorSettings += ",threshold=" + String(format: "%.2f", thresholdParameter.value)
+        let headRoomParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_HeadRoom))!
+        compressorSettings += ",headroom=" + String(format: "%.2f", headRoomParameter.value)
+        let expansionRatioParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ExpansionRatio))!
+        compressorSettings += ",expansion_rate=" + String(format: "%.2f", expansionRatioParameter.value)
+        let attackTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_AttackTime))!
+        compressorSettings += ",attack_time=" + String(format: "%.2f", attackTimeParameter.value)
+        let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
+        compressorSettings += ",release_time=" + String(format: "%.2f", releaseTimeParameter.value)
+        let compressorEvent = Message.EffectSettings(EffectSettingsDescription.Compressor(compressorSettings))
+
+        // Reverb
+        var reverbSettings = "bypass=\(reverb.bypass)"
+        reverbSettings += ",preset=\(reverb.auAudioUnit.currentPreset!.name)"
+        reverbSettings += ",wet_dry_mix=" + String(format: "%.2f", reverb.wetDryMix)
+        let reverbEvent = Message.EffectSettings(EffectSettingsDescription.Reverb(reverbSettings))
+
+        // Time pitch
+        var timePitchSettings = "bypass=\(timePitch.bypass)"
+        timePitchSettings += ",pitch=" + String(format: "%.2f", timePitch.pitch)
+        let timePitchEvent = Message.EffectSettings(EffectSettingsDescription.TimePitch(timePitchSettings))
+
+        return [eqEvent, compressorEvent, reverbEvent, timePitchEvent]
+    }
+
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
         if let gain = gainCorrection {
@@ -345,6 +395,8 @@ class SampleRenderer {
                 encounteredUnknownEvent = true
             }
         })
+
+        events.append(contentsOf: getEffectSettingsEvents().map({ message in MidiEvent.MessageEvent(0.0, message) }))
 
         if encounteredUnknownEvent {
             print("Warning: Encountered unknown event")

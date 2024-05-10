@@ -80,6 +80,12 @@ def split_events(input: str, output: str, skip: float, window_duration: float):
     with open(output_filename, mode='w', newline='') as outfile:
         writer = csv.writer(outfile)
         writer.writerows(prev_overflow + collected)
+    
+    if len(overflow) != 0:
+        output_filename = str(output) % (idx + 1)
+        with open(output_filename, mode='w', newline='') as outfile:
+            writer = csv.writer(outfile)
+            writer.writerows(overflow)
 
 
 def split(in_dir: Path, out_dir: Path, sample_name: str, skip: float, duration: float):
@@ -109,20 +115,17 @@ if __name__ == "__main__":
     parser.add_argument('output_directory', help='The directory to write files to')
     args = parser.parse_args()
 
+    def split_sample(sample_name):
+        print(f"Converting {sample_name}")
+        output_dir = Path(args.output_directory) / sample_name
+        output_dir.mkdir(exist_ok = True)
+
+        skip = random.uniform(0, 2.5)
+        split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=4.95)
+        return sample_name
+
     sample_names = load_sample_names(args.input_directory)
     with ThreadPoolExecutor(max_workers=8) as executor:
-        tasks = []
-        for sample_name in sample_names:
-            def split_sample():
-                print(f"Converting {sample_name}")
-                output_dir = Path(args.output_directory) / sample_name
-                output_dir.mkdir(exist_ok = True)
-
-                skip = random.uniform(0, 2.5)
-                split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=4.95)
-                return sample_name
-            tasks.append(executor.submit(split_sample))
-
-        for future in as_completed(tasks):
-            print(f"Finished processing {sample_name}")
-
+        converts = executor.map(split_sample, sample_names)
+        for converted in converts:
+            print(f"Processed {converted}")
