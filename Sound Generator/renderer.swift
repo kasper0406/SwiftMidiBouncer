@@ -42,15 +42,25 @@ struct Note: Comparable {
     }
 }
 
+enum EffectSettingsDescription {
+    case Eq(String)
+    case Compressor(String)
+    case Reverb(String)
+    case TimePitch(String)
+}
+
 enum Message {
     case Tempo(Double)
     case TimeSignature(TimeSignature)
+    case EffectSettings(EffectSettingsDescription)
 
     func order() -> Int {
         switch self {
         case .Tempo:
             return 0
         case .TimeSignature:
+            return 1
+        case .EffectSettings:
             return 2
         }
     }
@@ -232,6 +242,46 @@ class SampleRenderer {
         timePitch.pitch = Float(Int.random(in: 0...40))
     }
 
+    private func getEffectSettingsEvents() -> [Message] {
+        // Eq
+        var eqSettings = "bypass=\(eq.bypass)"
+        eqSettings += ",bands="
+        for (i, band) in eq.bands.enumerated() {
+            eqSettings += String(format: "%.2f", band.gain)
+            if i != eq.bands.count - 1 {
+                eqSettings += ","
+            }
+        }
+        let eqEvent = Message.EffectSettings(EffectSettingsDescription.Eq(eqSettings))
+
+        // Compressor
+        var compressorSettings = "bypass=\(compressor.bypass)"
+        let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
+        compressorSettings += ",threshold=" + String(format: "%.2f", thresholdParameter.value)
+        let headRoomParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_HeadRoom))!
+        compressorSettings += ",headroom=" + String(format: "%.2f", headRoomParameter.value)
+        let expansionRatioParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ExpansionRatio))!
+        compressorSettings += ",expansion_rate=" + String(format: "%.2f", expansionRatioParameter.value)
+        let attackTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_AttackTime))!
+        compressorSettings += ",attack_time=" + String(format: "%.2f", attackTimeParameter.value)
+        let releaseTimeParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_ReleaseTime))!
+        compressorSettings += ",release_time=" + String(format: "%.2f", releaseTimeParameter.value)
+        let compressorEvent = Message.EffectSettings(EffectSettingsDescription.Compressor(compressorSettings))
+
+        // Reverb
+        var reverbSettings = "bypass=\(reverb.bypass)"
+        reverbSettings += ",preset=\(reverb.auAudioUnit.currentPreset!.name)"
+        reverbSettings += ",wet_dry_mix=" + String(format: "%.2f", reverb.wetDryMix)
+        let reverbEvent = Message.EffectSettings(EffectSettingsDescription.Reverb(reverbSettings))
+
+        // Time pitch
+        var timePitchSettings = "bypass=\(timePitch.bypass)"
+        timePitchSettings += ",pitch=" + String(format: "%.2f", timePitch.pitch)
+        let timePitchEvent = Message.EffectSettings(EffectSettingsDescription.TimePitch(timePitchSettings))
+
+        return [eqEvent, compressorEvent, reverbEvent, timePitchEvent]
+    }
+
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
         if let gain = gainCorrection {
@@ -287,19 +337,30 @@ class SampleRenderer {
         try sequencer.write(to: midiFileURL, smpteResolution: 0, replaceExisting: true)
     }
 
+    func transpose(trackSelect: Int, amount: Int) {
+        let track = sequencer.tracks[trackSelect]
+        track.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, _, _ in
+            if let midiEvent = event as?AVMIDINoteEvent {
+                midiEvent.key = UInt32(Int(midiEvent.key) + amount)
+            }
+        })
+    }
+
     /**
      Returns all the staged nodes ordered by the time they start playing
      */
-    func getStagedEvents() throws -> [MidiEvent] {
+    func getStagedEvents(trackSelect: Int = 0) throws -> [MidiEvent] {
         if sequencer.tracks.isEmpty {
             return []
         }
-        let track = sequencer.tracks[0]
+        let track = sequencer.tracks[trackSelect]
 
         var events: [MidiEvent] = []
         var encounteredUnknownEvent = false
+        var foundNoteEvents = false
         track.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, timestamp, _ in
             if let midiEvent = event as?AVMIDINoteEvent {
+                foundNoteEvents = true
                 events.append(MidiEvent.NoteEvent(timestamp.pointee, Note(
                     time: timestamp.pointee,
                     duration: midiEvent.duration,
@@ -311,6 +372,10 @@ class SampleRenderer {
                 encounteredUnknownEvent = true
             }
         })
+
+        if !foundNoteEvents {
+            return []
+        }
 
         sequencer.tempoTrack.enumerateEvents(in: AVBeatRange(start: 0.0, length: 999999999999.0), using: { event, timestamp, _ in
             if let tempoEvent = event as?AVExtendedTempoEvent {
@@ -331,11 +396,24 @@ class SampleRenderer {
             }
         })
 
+        events.append(contentsOf: getEffectSettingsEvents().map({ message in MidiEvent.MessageEvent(0.0, message) }))
+
         if encounteredUnknownEvent {
-            throw NSError(domain: "SampleGenerator", code: 1, userInfo: nil)
+            print("Warning: Encountered unknown event")
+            // throw NSError(domain: "SampleGenerator", code: 1, userInfo: nil)
         }
 
         return events.sorted()
+    }
+
+    func getTrackCount() -> Int {
+        return sequencer.tracks.count
+    }
+
+    func soloTrack(trackSelect: Int? = nil) {
+        for (i, track) in sequencer.tracks.enumerated() {
+            track.isSoloed = trackSelect == i
+        }
     }
 
     func clearTracks() {
@@ -372,8 +450,12 @@ class SampleRenderer {
         sequencer.currentPositionInSeconds = 0
         var maxTrackLengthInSeconds = 0.0
         sequencer.tracks.forEach { track in
-            track.destinationAudioUnit = sampler
-            maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
+            if track.isMuted {
+                track.destinationAudioUnit = nil
+            } else {
+                track.destinationAudioUnit = sampler
+                maxTrackLengthInSeconds = max(maxTrackLengthInSeconds, track.lengthInSeconds)
+            }
         }
         if let cutoff = self.generate_cutoff {
             maxTrackLengthInSeconds = min(cutoff, maxTrackLengthInSeconds)

@@ -66,6 +66,18 @@ func noteEventsToCsv(events: [MidiEvent]) -> String {
                 csv += "%tempo=\(newTempo)\n"
             case .TimeSignature(let newTimeSignature):
                 csv += "%timeSignature=\(newTimeSignature.notesPerBar)/\(newTimeSignature.noteValue)\n"
+            case .EffectSettings(let effectSettings):
+                switch effectSettings {
+                case .Compressor(let compressorSpec):
+                    csv += "%compressor," + compressorSpec
+                case .Eq(let eqSpec):
+                    csv += "%eq," + eqSpec
+                case .Reverb(let reverbSpec):
+                    csv += "%reverb," + reverbSpec
+                case .TimePitch(let timePitchSpec):
+                    csv += "%timepitch," + timePitchSpec
+                }
+                csv += "\n"
             }
         }
 

@@ -7,17 +7,16 @@
 
 import Foundation
 
-// TODO:
-//   Generated note 78 playing twice at the same time in dual_hands/piano_yamaha_grand_key_pitch_78/piano_yamaha_grand_key_pitch_14.csv !!!
-//   Mellow vibe piano seems to do weird things with its sound...
+// TODO: Piano Perfect mix volume can be ultra low
 
-if CommandLine.arguments.count != 4 {
-    print("This program must be used as ./sound_generator <dataset_dir> <partition_number> <samples_per_instrument>")
+if CommandLine.arguments.count < 3 {
+    print("This program must be used as ./sound_generator {generate_random, from_midi} <output_dir> ...")
+    print("  if generate_random: ./sound_generator generate_random <output_dir> <partition_number> <samples_per_instrument>")
+    print("  if from_midi: ./sound_generator from_midi <output_dir> <midi_file>")
     exit(1)
 }
-let datasetDirectory = URL(fileURLWithPath: CommandLine.arguments[1])
-let partitionNumber = CommandLine.arguments[2]
-let samplesPerInstrument = Int(CommandLine.arguments[3])!
+
+let outputDirectory = URL(fileURLWithPath: CommandLine.arguments[2])
 
 let cwd = FileManager.default.currentDirectoryPath
 let pianoKeyRange = 21...108
@@ -126,56 +125,22 @@ let instruments = [
         gainCorrection: -8.0
     )
 ]
-let totalSamples = instruments.count * samplesPerInstrument
 
-// print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
+switch CommandLine.arguments[1] {
+case "generate_random":
+    let partitionNumber = CommandLine.arguments[3]
+    let samplesPerInstrument = Int(CommandLine.arguments[4])!
+    try play_random(
+        partitionNumber: partitionNumber,
+        samplesPerInstrument: samplesPerInstrument,
+        instruments: instruments,
+        datasetDirectory: outputDirectory)
 
-let renderer = try SampleRenderer()
-renderer.setCutoff(5.0) // Do not generate more than 5 seconds of audio
+case "from_midi":
+    let midiFile = URL(fileURLWithPath: CommandLine.arguments[3])
+    try generate_from_midi(midiFile: midiFile, instruments: instruments, outputDirectory: outputDirectory)
 
-let generator = EventGenerator()
-
-func updateLine(with newText: String) {
-    let clearLineSequence = "\r" + String(repeating: " ", count: 80) + "\r"
-    print(clearLineSequence, terminator: "")
-    print(newText, terminator: "")
-    fflush(stdout) // Ensure the output is immediately displayed
-}
-
-// updateLine(with: "Generating samples...")
-var count = 0
-for instrument in instruments {
-    let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
-    try renderer.useInstrument(instrumentPack: instrumentCopy, instrument.gainCorrection)
-
-    for i in 0..<samplesPerInstrument {
-        renderer.clearTracks()
-        renderer.pickRandomEffectPreset()
-
-        generator.generate(instrumentSpec: instrument, renderer: renderer)
-
-        let instrumentName = "\(instrument.category)_\(instrument.sampleName)"
-        let fileName = "\(instrumentName)_\(i)"
-
-        let datasetPartition = datasetDirectory.appending(path: "\(instrumentName)_\(partitionNumber)")
-        if !FileManager.default.fileExists(atPath: datasetPartition.path) {
-            try FileManager.default.createDirectory(at: datasetPartition, withIntermediateDirectories: false)
-        }
-        let aacOutputFile = datasetPartition.appending(path: "\(fileName).aac")
-        // let wavOutputFile = datasetPartition.appending(path: "\(fileName).wav")
-        let csvOutputFile = datasetPartition.appending(path: "\(fileName).csv")
-        let midiOutputFile = datasetPartition.appending(path: "\(fileName).mid")
-
-        let csvString = noteEventsToCsv(events: try renderer.getStagedEvents())
-        try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
-        try renderer.generateAac(outputUrl: aacOutputFile)
-        // try renderer.generateWav(outputUrl: wavOutputFile)
-        try renderer.writeMidiFile(midiFileURL: midiOutputFile)
-
-        count += 1
-        let completionPercent = (Double(count) / Double(totalSamples)) * 100
-        updateLine(with: "\(String(format: "%.3f", completionPercent))% complete")
-    }
-
-    try FileManager.default.removeItem(at: instrumentCopy)
+default:
+    print("Unknown option '\(CommandLine.arguments[1])'")
+    exit(1)
 }
