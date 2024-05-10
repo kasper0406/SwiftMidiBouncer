@@ -118,7 +118,7 @@ if __name__ == "__main__":
     def split_sample(sample_name):
         print(f"Converting {sample_name}")
         output_dir = Path(args.output_directory) / sample_name
-        output_dir.mkdir(exist_ok = True)
+        output_dir.mkdir(exist_ok=True, parents=True)
 
         skip = random.uniform(0, 2.5)
         split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=4.95)
