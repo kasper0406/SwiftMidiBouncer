@@ -5,9 +5,13 @@ import random
 import glob
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Set
 
 def get_silence_cutoff(input: Path):
-    command = [ "ffmpeg", "-i", str(input), "-af", "silencedetect=noise=-20dB:d=0.5", "-f", "null", "-" ]
+    return None
+
+    # Disable after we generate one midi file at a time
+    command = [ "ffmpeg", "-i", str(input), "-af", "silencedetect=noise=-30dB:d=1.0", "-f", "null", "-" ]
     result = subprocess.run(command, capture_output=True, text=True)
     lines = result.stderr.split('\n')
     
@@ -87,12 +91,11 @@ def split_events(input: str, output: str, skip: float, window_duration: float):
             writer = csv.writer(outfile)
             writer.writerows(overflow)
 
-
-def split(in_dir: Path, out_dir: Path, sample_name: str, skip: float, duration: float):
-    # print(f"Splitting: skip = {skip}, duration = {duration}")
-    split_audio(in_dir / f"{sample_name}.aac", out_dir / f"{sample_name}_%03d.aac", skip, duration)
-    split_events(in_dir / f"{sample_name}.csv", out_dir / f"{sample_name}_%03d.csv", skip, duration)
-
+class IncompleteSamples(Exception):
+    def __init__(self, message: str, audio_no_csv: Set, csv_no_audio: Set):
+        super().__init__(message)
+        self.audio_no_csv = audio_no_csv
+        self.csv_no_audio = csv_no_audio
 
 def load_sample_names(dataset_dir: Path):
     audio_names = set(
@@ -105,9 +108,29 @@ def load_sample_names(dataset_dir: Path):
     if audio_names != label_names:
         audio_no_csv = audio_names - label_names
         csv_no_audio = label_names - audio_names
-        raise ValueError(f"Did not find the same set of labels and samples!, {audio_no_csv}, {csv_no_audio}")
+        raise IncompleteSamples("Did not find the same set of labels and samples",  audio_no_csv, csv_no_audio)
 
     return list(sorted(audio_names))
+
+def split(in_dir: Path, out_dir: Path, sample_name: str, skip: float, duration: float):
+    # print(f"Splitting: skip = {skip}, duration = {duration}")
+    output_name = sample_name.split('/')[-1]
+    split_audio(in_dir / f"{sample_name}.aac", out_dir / f"{output_name}_%03d.aac", skip, duration)
+    split_events(in_dir / f"{sample_name}.csv", out_dir / f"{output_name}_%03d.csv", skip, duration)
+
+    try:
+        load_sample_names(out_dir)
+    except IncompleteSamples as e:
+        # Sometimes a last audio file is produced with decaying notes are being played.
+        # We will simply remove this faile.
+        if len(e.audio_no_csv) == 1 and len(e.csv_no_audio) == 0:
+            # Cleanup
+            (left_over_audio,) = e.audio_no_csv
+            print(f"Cleaning up left over audio {left_over_audio}.aac")
+            Path(out_dir / f"{left_over_audio}.aac").unlink()
+        else:
+            # Re-reaise e if we are not able to recover
+            raise e
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='split to split an audio files and midi events into 5 second clips')
