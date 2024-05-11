@@ -487,6 +487,45 @@ class SampleRenderer {
         engine.reset()
     }
 
+    static func normalizeAudioFile(audioFileUrl: URL) throws {
+        // Open the source audio file
+        var inputFile: AVAudioFile? = try AVAudioFile(forReading: audioFileUrl)
+
+        // Create a format for processing
+        let processingFormat = inputFile!.processingFormat
+        let frameCount = UInt32(inputFile!.length)
+        let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: frameCount)!
+
+        // Read the entire file into the buffer
+        try inputFile!.read(into: buffer, frameCount: frameCount)
+
+        // Find the peak level
+        guard let channelData = buffer.floatChannelData else { return }
+        var maxAmplitude: Float = 0.0
+        for frame in 0..<Int(frameCount) {
+            for channel in 0..<Int(buffer.format.channelCount) {
+                let absAmplitude = abs(channelData[channel][frame])
+                maxAmplitude = max(maxAmplitude, absAmplitude)
+            }
+        }
+
+        // Calculate gain
+        let gain = maxAmplitude > 0 ? 1.0 / maxAmplitude : 0.0
+
+        // Apply gain to each sample
+        for frame in 0..<Int(frameCount) {
+            for channel in 0..<Int(buffer.format.channelCount) {
+                channelData[channel][frame] *= gain
+            }
+        }
+        let settings = inputFile!.fileFormat.settings
+        inputFile = nil // Make sure we do not use the file anymore
+
+        // Write the normalized buffer to a new audio file
+        let outputFile = try AVAudioFile(forWriting: audioFileUrl, settings: settings)
+        try outputFile.write(from: buffer)
+    }
+
     deinit {
         engine.stop()
     }

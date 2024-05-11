@@ -7,7 +7,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def get_silence_cutoff(input: Path):
-    command = [ "ffmpeg", "-i", str(input), "-af", "silencedetect=noise=-40dB:d=0.5", "-f", "null", "-" ]
+    command = [ "ffmpeg", "-i", str(input), "-af", "silencedetect=noise=-20dB:d=0.5", "-f", "null", "-" ]
     result = subprocess.run(command, capture_output=True, text=True)
     lines = result.stderr.split('\n')
     

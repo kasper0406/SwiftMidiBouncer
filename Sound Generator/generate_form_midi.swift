@@ -19,8 +19,8 @@ func transpositionRange(_ instrument: InstrumentSpec, _ events: [MidiEvent]) -> 
     }
     let lowerBound = -(minNote - instrument.keyRange.lowerBound)
     let upperBound = instrument.keyRange.upperBound - maxNote
-    // Limit the transposition range to 12 keys (an octave) in either direction
-    return max(-12, lowerBound) ... min(upperBound, 12)
+    // Limit the transposition range to 7 keys (an octave) in either direction
+    return max(-7, lowerBound) ... min(upperBound, 7)
 }
 
 func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDirectory: URL) throws {
@@ -50,7 +50,6 @@ func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDire
             for transposition in transpositions {
                 print("Bouncinng transposition \(transposition) for track \(track)")
                 renderer.pickRandomEffectPreset()
-                renderer.transpose(trackSelect: track, amount: 1)
 
                 let instrumentName = "\(instrument.category)_\(instrument.sampleName)"
                 let fileName = "\(track)_\(instrumentName)_\(transposition)"
@@ -60,6 +59,11 @@ func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDire
                 let csvString = noteEventsToCsv(events: try renderer.getStagedEvents(trackSelect: track))
                 try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
                 try renderer.generateAac(outputUrl: aacOutputFile)
+                try SampleRenderer.normalizeAudioFile(audioFileUrl: aacOutputFile)
+
+                if transposition != transpositions.upperBound {
+                    renderer.transpose(trackSelect: track, amount: 1)
+                }
             }
             renderer.transpose(trackSelect: track, amount: -transpositions.upperBound)
         }
