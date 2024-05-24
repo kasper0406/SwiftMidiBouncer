@@ -401,7 +401,7 @@ class EventGenerator {
 
     let noteValues = [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ]
 
-    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
+    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 5.9) {
         let timeSignature = sampleTimeSignature()
         let tempo = min(max(40, round(generateGaussianRandom(mean: 100, standardDeviation: 35))), 200)
 

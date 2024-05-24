@@ -487,7 +487,11 @@ class SampleRenderer {
         engine.reset()
     }
 
-    static func normalizeAudioFile(audioFileUrl: URL) throws {
+    /**
+     Normalizes the apliitude of the audio file, and cuts away any leading silence.
+     The number of silence seconds trimmed away is returned, so the CSV file can be adjusted.
+     */
+    static func normalizeAudioFile(audioFileUrl: URL) throws -> Double {
         // Open the source audio file
         var inputFile: AVAudioFile? = try AVAudioFile(forReading: audioFileUrl)
 
@@ -499,23 +503,43 @@ class SampleRenderer {
         // Read the entire file into the buffer
         try inputFile!.read(into: buffer, frameCount: frameCount)
 
+        let epsilon: Float = 0.001
+
         // Find the peak level
-        guard let channelData = buffer.floatChannelData else { return }
+        let channelData = buffer.floatChannelData!
         var maxAmplitude: Float = 0.0
+
+        // Count the number of leading frames with 0 values
+        var skipFrames = 0
+        var audioStarted = false
+
         for frame in 0..<Int(frameCount) {
+            var frameMax: Float = 0.0
             for channel in 0..<Int(buffer.format.channelCount) {
                 let absAmplitude = abs(channelData[channel][frame])
                 maxAmplitude = max(maxAmplitude, absAmplitude)
+                frameMax = max(frameMax, absAmplitude)
+            }
+
+            if frameMax > epsilon {
+                audioStarted = true
+            }
+            if !audioStarted && frameMax < epsilon {
+                skipFrames += 1
             }
         }
 
         // Calculate gain
-        let gain = maxAmplitude > 0 ? 1.0 / maxAmplitude : 0.0
+        let gain = maxAmplitude > epsilon ? 1.0 / maxAmplitude : 0.0
 
         // Apply gain to each sample
         for frame in 0..<Int(frameCount) {
             for channel in 0..<Int(buffer.format.channelCount) {
-                channelData[channel][frame] *= gain
+                if frame + skipFrames >= frameCount {
+                    channelData[channel][frame] = 0
+                } else {
+                    channelData[channel][frame] = channelData[channel][frame + skipFrames] * gain
+                }
             }
         }
         let settings = inputFile!.fileFormat.settings
@@ -524,6 +548,8 @@ class SampleRenderer {
         // Write the normalized buffer to a new audio file
         let outputFile = try AVAudioFile(forWriting: audioFileUrl, settings: settings)
         try outputFile.write(from: buffer)
+
+        return Double(skipFrames) / buffer.format.sampleRate
     }
 
     deinit {

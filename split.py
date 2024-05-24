@@ -75,7 +75,7 @@ def split_events(input: str, output: str, skip: float, window_duration: float):
             overflow.append(modified_row)
 
         modified_row = row.copy()
-        modified_time = row_time - start_time # Updat the time to match
+        modified_time = row_time - start_time # Update the time to match
         modified_row[0] = f"{modified_time:.2f}"
         collected.append(modified_row)
     

@@ -56,10 +56,11 @@ func generate_from_midi(midiFile: URL, instruments: [InstrumentSpec], outputDire
                 let aacOutputFile = outputDirectory.appending(path: "\(fileName).aac")
                 let csvOutputFile = outputDirectory.appending(path: "\(fileName).csv")
 
+                try renderer.generateAac(outputUrl: aacOutputFile)
+                let skipDuration = try SampleRenderer.normalizeAudioFile(audioFileUrl: aacOutputFile)
+
                 let csvString = noteEventsToCsv(events: try renderer.getStagedEvents(trackSelect: track))
                 try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
-                try renderer.generateAac(outputUrl: aacOutputFile)
-                try SampleRenderer.normalizeAudioFile(audioFileUrl: aacOutputFile)
 
                 if transposition != transpositions.upperBound {
                     renderer.transpose(trackSelect: track, amount: 1)
