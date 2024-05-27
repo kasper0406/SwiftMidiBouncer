@@ -44,7 +44,7 @@ def generate_partition(partition):
 
     successful = False
     while not successful and not shut_down:
-        program = [executable, dataset, str(partition), str(samples_per_partition)]
+        program = [executable, "generate_from_midi", dataset, str(partition), str(samples_per_partition)]
         process = subprocess.Popen(program, stdout=subprocess.PIPE, text=True)
 
         while True:

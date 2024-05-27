@@ -25,7 +25,8 @@ let instruments = [
         url: URL(fileURLWithPath: "\(cwd)/instruments/vibraphone_keys.exs"),
         keyRange: pianoKeyRange,
         category: "keys",
-        sampleName: "vibraphone"
+        sampleName: "vibraphone",
+        maxComplexity: 4
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/different_phase_clav.exs"),
@@ -46,16 +47,11 @@ let instruments = [
         sampleName: "learners_piano"
     ),
     InstrumentSpec(
-        url: URL(fileURLWithPath: "\(cwd)/instruments/pure_digital_keys.exs"),
-        keyRange: pianoKeyRange,
-        category: "keys",
-        sampleName: "pure_digital"
-    ),
-    InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/80_keyboard.exs"),
         keyRange: pianoKeyRange,
         category: "keys",
-        sampleName: "80_keyboard"
+        sampleName: "80_keyboard",
+        maxComplexity: 4
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/yamaha_grand.exs"),

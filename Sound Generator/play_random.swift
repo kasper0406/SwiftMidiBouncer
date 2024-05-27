@@ -13,7 +13,7 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
     // print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
 
     let renderer = try SampleRenderer()
-    let maxDuration = 6.0
+    let maxDuration = 6.2
     renderer.setCutoff(maxDuration) // Do not generate more than 6 seconds of audio
 
     let generator = EventGenerator()

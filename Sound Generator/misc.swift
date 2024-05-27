@@ -20,6 +20,8 @@ struct InstrumentSpec {
     var sampleName: String // Fx `Yamaha7C`, 'c-and-p`, etc.
 
     var gainCorrection: Float?
+
+    var maxComplexity: Int?
 }
 
 func isBufferAllZeros(buffer: AVAudioPCMBuffer) -> Bool {
