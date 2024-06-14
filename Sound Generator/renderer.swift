@@ -199,7 +199,7 @@ class SampleRenderer {
 
     func pickRandomEffectPreset() {
         // Eq
-        eq.bypass = Double.random(in: 0.0...1.0) < 0.4 // Bypass 40% of the time
+        eq.bypass = Double.random(in: 0.0...1.0) < 0.5 // Bypass 50% of the time
         let a = Double.random(in: 0.5...1)
         let b = Double.random(in: 0.5...1)
         let numBands: Double = Double(eq.bands.endIndex + 1)
@@ -211,7 +211,7 @@ class SampleRenderer {
         }
 
         // Compressor
-        compressor.bypass = Double.random(in: 0.0...1.0) < 0.3 // Bypass 30% of the time
+        compressor.bypass = Double.random(in: 0.0...1.0) < 0.5 // Bypass 50% of the time
         // Global, dB, -40->20, -20
         let thresholdParameter = compressor.auAudioUnit.parameterTree!.parameter(withAddress: AUParameterAddress(kDynamicsProcessorParam_Threshold))!
         thresholdParameter.setValue(Float.random(in: -25...5), originator: nil)
@@ -284,6 +284,7 @@ class SampleRenderer {
 
     func useInstrument(instrumentPack: URL, _ gainCorrection: Float?) throws {
         try sampler.loadInstrument(at: instrumentPack)
+        // print("Loaded instrument at \(instrumentPack)")
         if let gain = gainCorrection {
             sampler.overallGain = gain
         }

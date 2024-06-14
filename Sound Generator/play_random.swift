@@ -28,10 +28,13 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
     // updateLine(with: "Generating samples...")
     var count = 0
     for instrument in instruments {
+        // print("Copying instrument from \(instrument.url)")
         let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
+        // print("Using instrument \(instrumentCopy)")
         try renderer.useInstrument(instrumentPack: instrumentCopy, instrument.gainCorrection)
 
         for i in 0..<samplesPerInstrument {
+            // print("Generating sample \(i)")
             renderer.clearTracks()
             renderer.pickRandomEffectPreset()
 

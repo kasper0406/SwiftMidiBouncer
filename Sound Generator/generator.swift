@@ -533,7 +533,7 @@ class EventGenerator {
     }
 
     private func noteValueProbDist() -> [Double] {
-        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.5, standardDeviation: 0.6)))
+        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.3, standardDeviation: 0.5)))
         let variance = 0.35 * mean
 
         let expectation = noteValues.map({ value in -0.5 * pow((value - mean) / variance, 2) })

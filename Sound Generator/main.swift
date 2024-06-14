@@ -29,22 +29,10 @@ let instruments = [
         maxComplexity: 4
     ),
     InstrumentSpec(
-        url: URL(fileURLWithPath: "\(cwd)/instruments/different_phase_clav.exs"),
-        keyRange: pianoKeyRange,
-        category: "piano",
-        sampleName: "different_phase_clav"
-    ),
-    InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/perfect_mix_piano.exs"),
         keyRange: pianoKeyRange,
         category: "piano",
         sampleName: "perfect_mix_piano"
-    ),
-    InstrumentSpec(
-        url: URL(fileURLWithPath: "\(cwd)/instruments/learners_piano.exs"),
-        keyRange: pianoKeyRange,
-        category: "piano",
-        sampleName: "learners_piano"
     ),
     InstrumentSpec(
         url: URL(fileURLWithPath: "\(cwd)/instruments/80_keyboard.exs"),
