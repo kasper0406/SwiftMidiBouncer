@@ -13,7 +13,8 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
     // print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
 
     let renderer = try SampleRenderer()
-    renderer.setCutoff(5.0) // Do not generate more than 5 seconds of audio
+    let maxDuration = 6.2
+    renderer.setCutoff(maxDuration) // Do not generate more than 6 seconds of audio
 
     let generator = EventGenerator()
 
@@ -27,14 +28,17 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
     // updateLine(with: "Generating samples...")
     var count = 0
     for instrument in instruments {
+        // print("Copying instrument from \(instrument.url)")
         let instrumentCopy = try createTemporaryCopyOfFile(originalFilePath: instrument.url)
+        // print("Using instrument \(instrumentCopy)")
         try renderer.useInstrument(instrumentPack: instrumentCopy, instrument.gainCorrection)
 
         for i in 0..<samplesPerInstrument {
+            // print("Generating sample \(i)")
             renderer.clearTracks()
             renderer.pickRandomEffectPreset()
 
-            generator.generate(instrumentSpec: instrument, renderer: renderer)
+            generator.generate(instrumentSpec: instrument, renderer: renderer, maxDuration: maxDuration)
 
             let instrumentName = "\(instrument.category)_\(instrument.sampleName)"
             let fileName = "\(instrumentName)_\(i)"
@@ -51,6 +55,8 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
             let csvString = noteEventsToCsv(events: try renderer.getStagedEvents())
             try csvString.write(to: csvOutputFile, atomically: false, encoding: .utf8)
             try renderer.generateAac(outputUrl: aacOutputFile)
+            let skipDuration = try SampleRenderer.normalizeAudioFile(audioFileUrl: aacOutputFile)
+
             // try renderer.generateWav(outputUrl: wavOutputFile)
             try renderer.writeMidiFile(midiFileURL: midiOutputFile)
 

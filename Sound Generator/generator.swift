@@ -401,7 +401,7 @@ class EventGenerator {
 
     let noteValues = [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ]
 
-    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
+    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 5.9) {
         let timeSignature = sampleTimeSignature()
         let tempo = min(max(40, round(generateGaussianRandom(mean: 100, standardDeviation: 35))), 200)
 
@@ -432,13 +432,13 @@ class EventGenerator {
             let startingKey = Int.random(in: -6..<6)
 
             let playBothHands = Double.random(in: 0...1.0) < 0.95
+            let maxComplexity = instrumentSpec.maxComplexity ?? 10
             if playBothHands {
                 let leftMiddle = middle - range / 4
                 let rightMiddle = middle + range / 4
 
-                // Allow between 1 and 6 notes per hand playing at the same time
-                let leftHandComplexity = UInt8.random(in: 1...6)
-                let rightHandComplexity = UInt8.random(in: 1...6)
+                let leftHandComplexity = UInt8.random(in: 1...UInt8(maxComplexity / 2))
+                let rightHandComplexity = UInt8.random(in: 1...UInt8(maxComplexity / 2))
 
                 let leftHandValueDist = noteValueProbDist()
                 let rightHandValueDist = noteValueProbDist()
@@ -449,7 +449,7 @@ class EventGenerator {
                 events.append(contentsOf: leftHand)
                 events.append(contentsOf: rightHand)
             } else {
-                let complexity = UInt8.random(in: 1...6)
+                let complexity = UInt8.random(in: 1...UInt8(maxComplexity))
                 let noteValueDist = noteValueProbDist()
                 let hand = generateHandForMeasure(time, startingKey, middle, complexity, noteValueDist, maxDurationInBeats, instrumentSpec, timeSignature)
                 events.append(contentsOf: hand)
@@ -533,7 +533,7 @@ class EventGenerator {
     }
 
     private func noteValueProbDist() -> [Double] {
-        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.5, standardDeviation: 0.6)))
+        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.3, standardDeviation: 0.5)))
         let variance = 0.35 * mean
 
         let expectation = noteValues.map({ value in -0.5 * pow((value - mean) / variance, 2) })

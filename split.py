@@ -23,12 +23,18 @@ def get_silence_cutoff(input: Path):
 
     return last_silence_start
 
-def split_audio(input: str, output: str, skip: float, duration: float):
+def split_audio(input: Path, output: str, skip: float, duration: float):
     command = [ "ffmpeg" ]
     silence_cutoff = get_silence_cutoff(input)
     if silence_cutoff is not None:
         command += [ "-t", str(silence_cutoff - skip) ]
-    command += [ "-ss", str(skip), "-i", input, "-f", "segment", "-segment_time", str(duration), "-c", "copy", output ]
+
+    aac_decode_delay = 0
+    if str(input).endswith(".aac"):
+        # TODO: Consider making this more resilient by using ffprobe
+        aac_decode_delay = 0.0464399
+
+    command += [ "-ss", str(skip + aac_decode_delay), "-i", input, "-f", "segment", "-segment_time", str(duration), "-c", "copy", output ]
     subprocess.run(command)
 
 def split_events(input: str, output: str, skip: float, window_duration: float):
@@ -75,7 +81,7 @@ def split_events(input: str, output: str, skip: float, window_duration: float):
             overflow.append(modified_row)
 
         modified_row = row.copy()
-        modified_time = row_time - start_time # Updat the time to match
+        modified_time = row_time - start_time # Update the time to match
         modified_row[0] = f"{modified_time:.2f}"
         collected.append(modified_row)
     
@@ -144,7 +150,7 @@ if __name__ == "__main__":
         output_dir.mkdir(exist_ok=True, parents=True)
 
         skip = random.uniform(0, 2.5)
-        split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=4.95)
+        split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=5.95)
         return sample_name
 
     sample_names = load_sample_names(args.input_directory)

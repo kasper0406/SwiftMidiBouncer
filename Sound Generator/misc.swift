@@ -20,6 +20,8 @@ struct InstrumentSpec {
     var sampleName: String // Fx `Yamaha7C`, 'c-and-p`, etc.
 
     var gainCorrection: Float?
+
+    var maxComplexity: Int?
 }
 
 func isBufferAllZeros(buffer: AVAudioPCMBuffer) -> Bool {
@@ -48,6 +50,7 @@ func beatsToSeconds(_ beats: Double, _ tempo: Double) -> Double {
 
 func noteEventsToCsv(events: [MidiEvent]) -> String {
     var tempo = 120.0
+    var firstEventTime: Double?
 
     var csv = ""
     for event in events {
@@ -58,7 +61,15 @@ func noteEventsToCsv(events: [MidiEvent]) -> String {
             let timeInSeconds = beatsToSeconds(note.time, tempo)
             let durationInSeconds = beatsToSeconds(note.duration, tempo)
 
-            csv += "\(timeInSeconds),\(durationInSeconds),\(note.key),\(velocityFraction)\n"
+            // Kind of hacky...
+            // We normalize the audio such that the first sound will be made by the first event
+            // Adjust the csv accordingly
+            if firstEventTime == nil {
+                firstEventTime = timeInSeconds
+            }
+
+            let adjustedTime = timeInSeconds - firstEventTime!
+            csv += "\(adjustedTime),\(durationInSeconds),\(note.key),\(velocityFraction)\n"
         case .MessageEvent(_, let message):
             switch message {
             case .Tempo(let newTempo):
