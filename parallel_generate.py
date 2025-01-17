@@ -6,12 +6,12 @@ import time
 import os
 import json
 
-executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-gcnkanfkysxnlqgpwolqfsjzwxty/Build/Products/Release/Sound Generator"
+executable = "/Users/knielsen/Library/Developer/Xcode/DerivedData/Sound_Generator-bkvbtlubsstgduadtcnmxvdimima/Build/Products/Release/Sound Generator"
 
-dataset = "/Volumes/git/ml/datasets/midi-to-sound/dataset_v3"
-workers = 14
+dataset = "/Volumes/git/ml/datasets/midi-to-sound/dataset_2025_random_6"
+workers = 10
 
-partitions = 1000
+partitions = 500
 samples_per_partition = 100
 
 progress_file = "generate.state"

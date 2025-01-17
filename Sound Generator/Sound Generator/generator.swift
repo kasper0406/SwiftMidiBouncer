@@ -18,18 +18,19 @@ enum Chord: CaseIterable {
     func intervals() -> [Int] {
         var intervals = switch self {
         case .major:
-            [0, 4, 7, 12]
+            [0, 4, 7]
         case .minor:
-            [0, 3, 7, 12]
+            [0, 3, 7]
         case .diminished:
-            [0, 3, 6, 12]
+            [0, 3, 6]
         case .augmented:
-            [0, 4, 8, 12]
+            [0, 4, 8]
         case .random:
             [ Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12), Int.random(in: 0...12) ]
         case .single:
             [0]
         }
+        intervals = IntervalDrop(dropRate: 0.2).apply(intervals: intervals)
         intervals = TransformTo7thChord.allCases.randomElement()!.apply(intervals: intervals)
         intervals = SuspendChord.allCases.randomElement()!.apply(intervals: intervals)
         return intervals
@@ -61,7 +62,7 @@ enum Scale: CaseIterable {
 }
 
 enum PlayType: CaseIterable {
-    case appegioChord
+//    case appegioChord
     case harmonicChord
     case scale
 
@@ -75,8 +76,8 @@ enum PlayType: CaseIterable {
         ]
 
         var intervals = switch self {
-        case .appegioChord:
-            Chord.allCases.randomElement()!.intervals()
+//        case .appegioChord:
+//            Chord.allCases.randomElement()!.intervals()
         case .harmonicChord:
             Chord.allCases.randomElement()!.intervals()
         case .scale:
@@ -84,7 +85,7 @@ enum PlayType: CaseIterable {
         }
 
         // Apply a bunch of transforms
-        while intervals.count < 10 || Double.random(in: 0..<1) < 0.95 {
+        while intervals.count < 10 && Double.random(in: 0..<1) < 0.80 {
             let transform = transformations.randomElement()!
             intervals = transform.apply(intervals: intervals)
         }
@@ -146,16 +147,36 @@ enum SuspendChord: CaseIterable, IntervalTransformation {
     }
 }
 
+class IntervalDrop: IntervalTransformation {
+    private var dropRate: Double
+
+    init(dropRate: Double) {
+        self.dropRate = dropRate;
+    }
+    
+    func apply(intervals: [Int]) -> [Int] {
+        var transformed: [Int] = []
+        for interval in intervals {
+            // Drop the event with 35% probability
+            if Double.random(in: 0..<1) > self.dropRate {
+                transformed.append(interval)
+            }
+
+        }
+        return transformed
+    }
+}
+
 class IntervalDupOrDrop: IntervalTransformation {
     func apply(intervals: [Int]) -> [Int] {
         var transformed: [Int] = []
         for interval in intervals {
-            while Double.random(in: 0..<1) < 0.3 {
+            while Double.random(in: 0..<1) < 0.1 {
                 // Duplicate the interval
                 transformed.append(interval)
             }
             // Drop the event with 20% probability
-            if Double.random(in: 0..<1) < 0.2 {
+            if Double.random(in: 0..<1) > 0.2 {
                 transformed.append(interval)
             }
 
@@ -193,9 +214,10 @@ class IntervalSwapper: IntervalTransformation {
         for i in 0..<max(0, (shuffled.count - 1)) {
             if Double.random(in: 0..<1.0) < 0.3 {
                 // Flip if we throw a 30% dice, otherwise do nothing
+                let swapperIdx = Int.random(in: (i + 1)..<shuffled.count)
                 let tmp = shuffled[i]
-                shuffled[i] = shuffled[i + 1]
-                shuffled[i + 1] = tmp
+                shuffled[i] = shuffled[swapperIdx]
+                shuffled[swapperIdx] = tmp
             }
         }
 
@@ -284,6 +306,15 @@ func convertToInstrumentKeys(startingKey: Int, middleKey: Int, instrumentSpec: I
         }
     }
 
+    return keys
+}
+
+func uniformRandomKeys(instrumentSpec: InstrumentSpec) -> [Int] {
+    let length = Int.random(in: 1...14)
+    var keys: [Int] = []
+    for i in 0...length {
+        keys.append(Int.random(in: instrumentSpec.keyRange))
+    }
     return keys
 }
 
@@ -401,7 +432,7 @@ class EventGenerator {
 
     let noteValues = [ 1.0/32.0, 1.0/16.0, 1.0/8.0, 1.0/4.0, 1.0/2.0, 1.0, 2.0 ]
 
-    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 5.9) {
+    func generate(instrumentSpec: InstrumentSpec, renderer: SampleRenderer, maxDuration: Double = 4.9) {
         let timeSignature = sampleTimeSignature()
         let tempo = min(max(40, round(generateGaussianRandom(mean: 100, standardDeviation: 35))), 200)
 
@@ -432,13 +463,12 @@ class EventGenerator {
             let startingKey = Int.random(in: -6..<6)
 
             let playBothHands = Double.random(in: 0...1.0) < 0.95
-            let maxComplexity = instrumentSpec.maxComplexity ?? 10
             if playBothHands {
                 let leftMiddle = middle - range / 4
                 let rightMiddle = middle + range / 4
 
-                let leftHandComplexity = UInt8.random(in: 1...UInt8(maxComplexity / 2))
-                let rightHandComplexity = UInt8.random(in: 1...UInt8(maxComplexity / 2))
+                let leftHandComplexity = UInt8.random(in: 1...6)
+                let rightHandComplexity = UInt8.random(in: 1...6)
 
                 let leftHandValueDist = noteValueProbDist()
                 let rightHandValueDist = noteValueProbDist()
@@ -449,7 +479,7 @@ class EventGenerator {
                 events.append(contentsOf: leftHand)
                 events.append(contentsOf: rightHand)
             } else {
-                let complexity = UInt8.random(in: 1...UInt8(maxComplexity))
+                let complexity = UInt8.random(in: 1...6)
                 let noteValueDist = noteValueProbDist()
                 let hand = generateHandForMeasure(time, startingKey, middle, complexity, noteValueDist, maxDurationInBeats, instrumentSpec, timeSignature)
                 events.append(contentsOf: hand)
@@ -473,8 +503,9 @@ class EventGenerator {
         var events: [Note] = []
 
         let playType = PlayType.allCases.randomElement()!
-        let intervals = playType.generateIntervals()
-        let keys = convertToInstrumentKeys(startingKey: startingKey, middleKey: middleKey, instrumentSpec: instrumentSpec, intervals: intervals)
+//        let intervals = playType.generateIntervals()
+//        let keys = convertToInstrumentKeys(startingKey: startingKey, middleKey: middleKey, instrumentSpec: instrumentSpec, intervals: intervals)
+        let keys = uniformRandomKeys(instrumentSpec: instrumentSpec)
 
         let startMeasure = measureFromTime(startTime, timeSignature)
         var time = startTime
@@ -489,51 +520,58 @@ class EventGenerator {
         // Map from key playing until end duration in seconds to access the complexity
         var currentlyPlayingKeys: [ Int: Double ] = [:]
         let repeatedKeys = (0..<10).flatMap { _ in keys } // Repeat the keys to not run out
-        for key in repeatedKeys {
-            if time >= maxDurationInBeats {
-                break
-            }
-            if measureFromTime(time, timeSignature) > startMeasure {
-                // We will generate a new set of beats for the next measure
-                break
-            }
-            if currentlyPlayingKeys.count < handNoteComplexity {
-                // If more than `handNoteComplexity` notes are playing we don't want to play more...
+        if playType == PlayType.harmonicChord {
+            let numNotesInChords = Int.random(in: 2...5)
+            for key in repeatedKeys[0..<numNotesInChords] {
                 let velocity = UInt8.random(in: 30..<128)
-                let noteValue = selectElement(from: noteValues,
-                                              basedOn: noteValueDist)!
-
+                let noteValue = selectElement(from: noteValues, basedOn: noteValueDist)!
                 let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
-                if currentlyPlayingKeys[key] != nil {
-                    // Skip this key as it is already playing
-                    continue
-                }
-                currentlyPlayingKeys[key] = time + durationInBeats
 
                 events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
-            } else if playType == PlayType.harmonicChord {
-                break
             }
+        } else {
+            for key in repeatedKeys {
+                if time >= maxDurationInBeats {
+                    break
+                }
+                if measureFromTime(time, timeSignature) > startMeasure {
+                    // We will generate a new set of keys for the next measure
+                    break
+                }
+                if currentlyPlayingKeys.count < handNoteComplexity {
+                    // If more than `handNoteComplexity` notes are playing we don't want to play more...
+                    let velocity = UInt8.random(in: 30..<128)
+                    let noteValue = selectElement(from: noteValues,
+                                                  basedOn: noteValueDist)!
+                    
+                    let durationInBeats = beatsFromNoteValue(noteValue: noteValue, timeSignature: timeSignature)
+                    if currentlyPlayingKeys[key] != nil {
+                        // Skip this key as it is already playing
+                        continue
+                    }
+                    currentlyPlayingKeys[key] = time + durationInBeats
+                    
+                    events.append(Note(time: time, duration: durationInBeats, key: UInt8(key), velocity: velocity))
+                }
 
-            if playType != PlayType.harmonicChord {
-                // In 30% the cases increment the time by some amount
-                if Double.random(in: 0..<1.0) < 0.3 {
+                // In 60% the cases increment the time by some amount
+                if Double.random(in: 0..<1.0) < 0.6 {
                     let waitTime = selectElement(from: noteValues,
                                                  basedOn: noteValueDist)!
                     time += beatsFromNoteValue(noteValue: waitTime, timeSignature: timeSignature)
                 }
+                
+                // Clean up the currently playing keys
+                let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
+                keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
             }
-
-            // Clean up the currently playing keys
-            let keysToRemove = currentlyPlayingKeys.filter { $0.value < time }.map { $0.key }
-            keysToRemove.forEach { currentlyPlayingKeys.removeValue(forKey: $0) }
         }
 
         return events
     }
 
     private func noteValueProbDist() -> [Double] {
-        let mean = min(noteValues.last!, max(noteValues.first!, generateGaussianRandom(mean: 0.3, standardDeviation: 0.5)))
+        let mean = min(noteValues.last!, max(noteValues[2], generateGaussianRandom(mean: 0.4, standardDeviation: 0.5)))
         let variance = 0.35 * mean
 
         let expectation = noteValues.map({ value in -0.5 * pow((value - mean) / variance, 2) })

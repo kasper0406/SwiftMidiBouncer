@@ -13,8 +13,7 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
     // print("Generating a total of \(totalSamples) samples for partition \(partitionNumber)")
 
     let renderer = try SampleRenderer()
-    let maxDuration = 6.2
-    renderer.setCutoff(maxDuration) // Do not generate more than 6 seconds of audio
+    renderer.setCutoff(5.0)
 
     let generator = EventGenerator()
 
@@ -38,7 +37,7 @@ func play_random(partitionNumber: String, samplesPerInstrument: Int, instruments
             renderer.clearTracks()
             renderer.pickRandomEffectPreset()
 
-            generator.generate(instrumentSpec: instrument, renderer: renderer, maxDuration: maxDuration)
+            generator.generate(instrumentSpec: instrument, renderer: renderer)
 
             let instrumentName = "\(instrument.category)_\(instrument.sampleName)"
             let fileName = "\(instrumentName)_\(i)"

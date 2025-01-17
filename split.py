@@ -25,16 +25,17 @@ def get_silence_cutoff(input: Path):
 
 def split_audio(input: Path, output: str, skip: float, duration: float):
     command = [ "ffmpeg" ]
-    silence_cutoff = get_silence_cutoff(input)
+    silence_cutoff = get_silence_cutoff(input.as_posix())
     if silence_cutoff is not None:
         command += [ "-t", str(silence_cutoff - skip) ]
 
     aac_decode_delay = 0
-    if str(input).endswith(".aac"):
-        # TODO: Consider making this more resilient by using ffprobe
-        aac_decode_delay = 0.0464399
+    # if str(input.as_posix()).endswith(".aac"):
+    #     # TODO: Consider making this more resilient by using ffprobe
+    #     aac_decode_delay = 0.0464399
 
-    command += [ "-ss", str(skip + aac_decode_delay), "-i", input, "-f", "segment", "-segment_time", str(duration), "-c", "copy", output ]
+    command += [ "-ss", str(skip + aac_decode_delay), "-i", input.as_posix(), "-f", "segment", "-segment_time", str(duration), "-c", "copy", output.as_posix() ]
+    print(f"Running: {command}")
     subprocess.run(command)
 
 def split_events(input: str, output: str, skip: float, window_duration: float):
@@ -103,12 +104,12 @@ class IncompleteSamples(Exception):
         self.audio_no_csv = audio_no_csv
         self.csv_no_audio = csv_no_audio
 
-def load_sample_names(dataset_dir: Path):
+def load_sample_names(dataset_dir: Path, audio_file_extension: str):
     audio_names = set(
-        map(lambda path: path[(len(str(dataset_dir)) + 1):-4], glob.glob(f"{dataset_dir}/**/*.aac", recursive=True))
+        map(lambda path: path[(len(dataset_dir.as_posix()) + 1):-(len(audio_file_extension) + 1)], glob.glob(f"{dataset_dir}/**/*.{audio_file_extension}", recursive=True))
     )
     label_names = set(
-        map(lambda path: path[(len(str(dataset_dir)) + 1):-4], glob.glob(f"{dataset_dir}/**/*.csv", recursive=True))
+        map(lambda path: path[(len(dataset_dir.as_posix()) + 1):-4], glob.glob(f"{dataset_dir}/**/*.csv", recursive=True))
     )
 
     if audio_names != label_names:
@@ -118,14 +119,14 @@ def load_sample_names(dataset_dir: Path):
 
     return list(sorted(audio_names))
 
-def split(in_dir: Path, out_dir: Path, sample_name: str, skip: float, duration: float):
+def split(in_dir: Path, out_dir: Path, sample_name: str, skip: float, duration: float, audio_input_extension: str):
     # print(f"Splitting: skip = {skip}, duration = {duration}")
     output_name = sample_name.split('/')[-1]
-    split_audio(in_dir / f"{sample_name}.aac", out_dir / f"{output_name}_%03d.aac", skip, duration)
+    split_audio(in_dir / f"{sample_name}.{audio_input_extension}", out_dir / f"{output_name}_%03d.aac", skip, duration)
     split_events(in_dir / f"{sample_name}.csv", out_dir / f"{output_name}_%03d.csv", skip, duration)
 
     try:
-        load_sample_names(out_dir)
+        load_sample_names(out_dir, audio_input_extension)
     except IncompleteSamples as e:
         # Sometimes a last audio file is produced with decaying notes are being played.
         # We will simply remove this faile.
@@ -142,6 +143,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='split to split an audio files and midi events into 5 second clips')
     parser.add_argument('input_directory', help='The directory with all the files')
     parser.add_argument('output_directory', help='The directory to write files to')
+    parser.add_argument('audio_extension', help='The extensions of the audio files')
     args = parser.parse_args()
 
     def split_sample(sample_name):
@@ -150,10 +152,10 @@ if __name__ == "__main__":
         output_dir.mkdir(exist_ok=True, parents=True)
 
         skip = random.uniform(0, 2.5)
-        split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=5.95)
+        split(Path(args.input_directory), output_dir, sample_name, skip=skip, duration=4.95, audio_input_extension=args.audio_extension)
         return sample_name
 
-    sample_names = load_sample_names(args.input_directory)
+    sample_names = load_sample_names(Path(args.input_directory), args.audio_extension)
     with ThreadPoolExecutor(max_workers=8) as executor:
         converts = executor.map(split_sample, sample_names)
         for converted in converts:
